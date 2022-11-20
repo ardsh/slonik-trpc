@@ -1,0 +1,165 @@
+import { SqlFragment, sql } from "slonik";
+import { z } from "zod";
+import { notEmpty } from "../helpers/zod";
+
+export type Interpretors<
+    TFilter extends Record<string, z.ZodType>,
+    TContext = any
+> = {
+    [x in keyof z.infer<z.ZodObject<TFilter>>]?: (
+        filter: z.infer<TFilter[x]>,
+        allFilters: z.infer<z.ZodObject<TFilter>>, // Does this need ZodRecursive or not?
+        context: TContext
+    ) => SqlFragment | null | undefined | false;
+};
+
+export type RecursiveFilterConditions<TFilter> = TFilter & {
+    AND?: RecursiveFilterConditions<TFilter>[];
+    OR?: RecursiveFilterConditions<TFilter>[];
+    NOT?: RecursiveFilterConditions<TFilter>;
+};
+
+type ZodRecursiveFilterConditions<TFilter extends Record<string, z.ZodType>> =
+    TFilter & {
+        AND: z.ZodOptional<
+            z.ZodArray<z.ZodObject<ZodRecursiveFilterConditions<TFilter>>>
+        >;
+        OR: z.ZodOptional<
+            z.ZodArray<z.ZodObject<ZodRecursiveFilterConditions<TFilter>>>
+        >;
+        NOT: z.ZodOptional<z.ZodObject<ZodRecursiveFilterConditions<TFilter>>>;
+    };
+
+export const recursiveFilterConditions = <
+    TFilter extends Record<string, z.ZodType>
+>(
+    interrFilter: TFilter
+): z.ZodObject<ZodRecursiveFilterConditions<TFilter>> => {
+    const coreFilter = z.object(interrFilter).partial();
+    const filter: any = z.lazy(() =>
+        z.object({
+            ...interrFilter,
+            OR: z.array(filter),
+            AND: z.array(filter),
+            NOT: filter,
+        }).partial()
+    );
+    return filter;
+};
+
+export type ZodPartial<TFilter extends Record<string, z.ZodType>> =
+    z.ZodOptional<
+        z.ZodObject<{
+            [k in keyof TFilter]: z.ZodOptional<TFilter[k]>;
+        }>
+    >;
+
+export type FilterOptions<
+    TFilter extends Record<string, z.ZodType>,
+    TContext = any
+> = {
+    /** Use this to pre-process any filters to make them consistent */
+    preprocess?: (
+        filters: z.infer<ZodPartial<TFilter>>,
+        context: TContext
+    ) => z.infer<ZodPartial<TFilter>>;
+    /** Use this to add any extra conditions, e.g. for forced authorization checks */
+    postprocess?: (
+        conditions: SqlFragment[],
+        filters: z.infer<ZodPartial<TFilter>>,
+        context: TContext
+    ) => SqlFragment[];
+};
+
+export function makeFilter<
+    TFilter extends Record<string, z.ZodType>,
+    TContext = any
+>(interpreters: Interpretors<TFilter>, options?: FilterOptions<TFilter>) {
+    type ActualFilters = RecursiveFilterConditions<
+        z.infer<ZodPartial<TFilter>>
+    >;
+    const interpretFilter = (filter: ActualFilters, context?: TContext) => {
+        const conditions = [] as SqlFragment[];
+        const addCondition = (item: SqlFragment | null) =>
+            item && conditions.push(item);
+        Object.keys(filter).forEach((key: string) => {
+            const interpreter = interpreters[key as never] as any;
+            const condition = interpreter?.(
+                filter[key as never],
+                filter as TFilter,
+                context
+            );
+            if (condition) {
+                addCondition(condition);
+            }
+        });
+        if (filter.OR?.length) {
+            const orConditions = filter.OR.map((or) => {
+                const orFilter = interpretFilter(or, context);
+                return orFilter?.length
+                    ? sql.fragment`(${sql.join(
+                          orFilter,
+                          sql.fragment`) AND (`
+                      )})`
+                    : null;
+            }).filter(notEmpty);
+            if (orConditions?.length) {
+                addCondition(
+                    sql.fragment`(${sql.join(
+                        orConditions,
+                        sql.fragment`) OR (`
+                    )})`
+                );
+            }
+        }
+        if (filter.AND?.length) {
+            const andConditions = filter.AND.map((and) => {
+                const andFilter = interpretFilter(and, context);
+                return andFilter?.length
+                    ? sql.fragment`(${sql.join(
+                          andFilter,
+                          sql.fragment`) AND (`
+                      )})`
+                    : null;
+            }).filter(notEmpty);
+            if (andConditions?.length) {
+                addCondition(
+                    sql.fragment`(${sql.join(
+                        andConditions,
+                        sql.fragment`) AND (`
+                    )})`
+                );
+            }
+        }
+        if (filter.NOT) {
+            const notFilter = interpretFilter(filter.NOT, context);
+            if (notFilter.length) {
+                addCondition(
+                    sql.fragment`NOT (${sql.join(
+                        notFilter,
+                        sql.fragment`) AND (`
+                    )})`
+                );
+            }
+        }
+
+        // return sql.fragment`(${sql.join(conditions, sql.fragment`) AND (`)})`;
+        return conditions;
+    };
+    const getConditions = (filters: ActualFilters, context?: TContext) => {
+        const conditions = interpretFilter(
+            options?.preprocess?.(filters, context) || filters,
+            context
+        );
+        return (
+            options?.postprocess?.(conditions, filters, context) || conditions
+        );
+    };
+    const getWhereFragment = (filter: ActualFilters, context?: TContext) => {
+        const conditions = getConditions(filter, context);
+        return conditions?.length
+            ? sql.fragment`(${sql.join(conditions, sql.fragment`) AND (`)})`
+            : sql.fragment`TRUE`;
+    };
+    return getWhereFragment;
+}

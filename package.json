@@ -1,0 +1,62 @@
+{
+    "name": "slonik-trpc",
+    "version": "0.1.0",
+    "description": "Slonik tRPC loader",
+    "main": "lib/index.js",
+    "types": "lib/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "format": "prettier --write \"src/**/*.(js|ts)\"",
+        "lint": "eslint src --ext .js,.ts",
+        "lint:fix": "eslint src --fix --ext .js,.ts",
+        "test": "jest --config jest.config.js --watch",
+        "prepare": "yarn build",
+        "prepublishOnly": "yarn test && yarn lint",
+        "preversion": "yarn lint",
+        "release": "yarn build && yarn changeset publish",
+        "version": "yarn format && git add -A src",
+        "postversion": "git push && git push --tags"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/ardsh/slonik-trpc.git"
+    },
+    "keywords": [
+        "slonik",
+        "trpc",
+        "pagination",
+        "postgres",
+        "slonik-loader",
+        "type-safe",
+        "typescript",
+        "zod"
+    ],
+    "author": "ardsh",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/ardsh/slonik-trpc/issues"
+    },
+    "homepage": "https://github.com/ardsh/slonik-trpc#readme",
+    "peerDependencies": {
+        "slonik": ">= 33",
+        "zod": ">= 3"
+    },
+    "devDependencies": {
+        "@changesets/cli": "^2.25.2",
+        "@types/jest": "^29.0.3",
+        "@typescript-eslint/eslint-plugin": "^5.38.0",
+        "@typescript-eslint/parser": "^5.43.0",
+        "eslint": "^8.23.1",
+        "eslint-plugin-jest": "^27.0.4",
+        "jest": "^29.0.3",
+        "prettier": "^2.7.1",
+        "slonik": "^33.0.3",
+        "slonik-interceptor-query-logging": "^1.4.7",
+        "ts-jest": "^29.0.1",
+        "typescript": "^4.9.3",
+        "zod": "^3.19.1"
+    },
+    "files": [
+        "lib/**/*"
+    ]
+}
