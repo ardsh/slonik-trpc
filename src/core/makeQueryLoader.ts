@@ -1,7 +1,7 @@
 import { sql, CommonQueryMethods, QuerySqlToken, SqlFragment } from "slonik";
 import { z } from 'zod';
 import { handleZodErrors, notEmpty } from "../helpers/zod";
-import { FilterOptions, Interpretors, makeFilter, recursiveFilterConditions, ZodPartial } from "./queryFilter";
+import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, recursiveFilterConditions, ZodPartial } from "./queryFilter";
 
 const orderDirection = z.enum(["ASC", "DESC", "ASC NULLS LAST", "DESC NULLS LAST"]);
 type OrderField = [string, z.infer<typeof orderDirection>];
@@ -37,7 +37,7 @@ type LoadParameters<
     skip?: number;
     orderBy?: [TSortable] extends [never] ? never : [TSortable[number], 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST'] | null;
     context?: TContext;
-    where?: TFilter;
+    where?: RecursiveFilterConditions<TFilter>;
 };
 
 const countQueryType = z.object({

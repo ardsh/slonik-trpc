@@ -1,6 +1,6 @@
 {
     "name": "slonik-trpc",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Slonik tRPC loader",
     "main": "lib/index.js",
     "types": "lib/index.d.ts",
@@ -10,8 +10,9 @@
         "lint": "eslint src --ext .js,.ts",
         "lint:fix": "eslint src --fix --ext .js,.ts",
         "test": "jest --config jest.config.js --watch",
+        "test:coverage": "yarn test --coverage",
         "prepare": "yarn build",
-        "prepublishOnly": "yarn test && yarn lint",
+        "prepublishOnly": "yarn lint",
         "preversion": "yarn lint",
         "release": "yarn build && yarn changeset publish",
         "version": "yarn format && git add -A src",
