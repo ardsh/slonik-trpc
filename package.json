@@ -10,13 +10,16 @@
         "lint": "eslint src --ext .js,.ts",
         "lint:fix": "eslint src --fix --ext .js,.ts",
         "test": "jest --config jest.config.js --watch",
-        "test:coverage": "yarn test --coverage",
+        "test:coverage": "jest --config jest.config.js --coverage",
         "prepare": "yarn build",
         "prepublishOnly": "yarn lint",
         "preversion": "yarn lint",
         "release": "yarn build && yarn changeset publish",
         "version": "yarn format && git add -A src",
         "postversion": "git push && git push --tags"
+    },
+    "publishConfig": {
+        "access": "public"
     },
     "repository": {
         "type": "git",

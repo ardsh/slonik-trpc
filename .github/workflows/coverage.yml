@@ -21,8 +21,26 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
 
+            - name: Start PostgreSQL on Ubuntu
+              run: |
+                sudo systemctl start postgresql.service
+                pg_isready
+        
+            - name: Create additional user
+              run: |
+                sudo -u postgres psql --command="CREATE USER testuser PASSWORD 'password'" --command="\du"
+
+            - name: Create additional database
+              run: |
+                sudo -u postgres createdb testdb --owner=testuser
+                PGPASSWORD=password
+
             - name: Install dependencies
               run: yarn install
 
             - name: Run the tests
               run: yarn test:coverage
+              env:
+                PGPASSWORD: password
+                PGUSER: testuser
+                PGDATABASE: testdb
