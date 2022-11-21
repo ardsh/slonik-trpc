@@ -1,8 +1,8 @@
-import { DatabasePool, createPool, CommonQueryMethods, sql } from 'slonik';
+import { createPool, CommonQueryMethods, sql } from 'slonik';
 import { createQueryLoggingInterceptor } from "slonik-interceptor-query-logging";
 
 function getPostgresUrl(): string {
-    return `postgres://${encodeURIComponent(process.env.PGUSER || 'postgres')}:${encodeURIComponent(process.env.PGPASSWORD || '')}@${
+    return process.env.POSTGRES_DSN || `postgres://${encodeURIComponent(process.env.PGUSER || 'postgres')}:${encodeURIComponent(process.env.PGPASSWORD || '')}@${
         process.env.PGHOST || '0.0.0.0'
     }:${process.env.PGPORT || '5432'}/${process.env.PGDATABASE || 'postgres'}`;
 }
@@ -26,21 +26,22 @@ export function makeQueryTester() {
             CREATE TABLE IF NOT EXISTS test_table_bar (
                 id integer NOT NULL PRIMARY KEY,
                 uid text NOT NULL,
+                date TIMESTAMP NOT NULL,
                 value text NOT NULL
             );
 
             INSERT INTO test_table_bar
-                (id, uid, value)
+                (id, uid, value, date)
             VALUES
-                (1, 'z', 'aaa'),
-                (2, 'y', 'aaa'),
-                (3, 'x', 'bbb'),
-                (4, 'w', 'bbb'),
-                (5, 'v', 'ccc'),
-                (6, 'u', 'ccc'),
-                (7, 't', 'ddd'),
-                (8, 's', 'ddd'),
-                (9, 'r', 'eee');
+                (1, 'z', 'aaa', '2022-01-01'),
+                (2, 'y', 'aaa', '2022-02-01'),
+                (3, 'x', 'bbb', '2022-03-01'),
+                (4, 'w', 'bbb', '2022-04-01'),
+                (5, 'v', 'ccc', '2022-05-01'),
+                (6, 'u', 'ccc', '2022-06-01'),
+                (7, 't', 'ddd', '2022-07-01'),
+                (8, 's', 'ddd', '2022-08-01'),
+                (9, 'r', 'eee', '2022-09-01');
         `);
     });
 

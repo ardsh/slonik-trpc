@@ -1,6 +1,7 @@
 import { sql, CommonQueryMethods, QuerySqlToken, SqlFragment } from "slonik";
 import { z } from 'zod';
 import { handleZodErrors, notEmpty } from "../helpers/zod";
+import { RemoveAny } from '../helpers/types';
 import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, recursiveFilterConditions, ZodPartial } from "./queryFilter";
 
 const orderDirection = z.enum(["ASC", "DESC", "ASC NULLS LAST", "DESC NULLS LAST"]);
@@ -48,7 +49,7 @@ export function makeQueryLoader<
     TFilterTypes extends Record<string, z.ZodTypeAny>,
     TContext,
     TFragment extends SqlFragment | QuerySqlToken,
-    TRequired extends readonly (keyof z.infer<TObject>)[]=[],
+    TRequired extends readonly [keyof z.infer<TObject>, ...(keyof z.infer<TObject>)[]]=[never],
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
     TVirtuals extends Record<string, any> = z.infer<TObject>,
     TPostprocessed extends Record<string, any> = z.infer<TObject>,
@@ -60,7 +61,7 @@ export function makeQueryLoader<
     /** If you specify custom filters, make sure the fields they reference are accessible from the main query*/
     filters?: {
         filters: TFilterTypes,
-        interpreters: Interpretors<TFilterTypes>,
+        interpreters: Interpretors<TFilterTypes, TContext>,
         options?: FilterOptions<TFilterTypes, TContext>
     }
     /** If true, zod type-checking validation will be skipped
@@ -148,7 +149,10 @@ export function makeQueryLoader<
         ${typeof skip === 'number' ? sql.fragment`OFFSET ${skip}` : sql.fragment``}
         `;
         const requiredFields = options?.required || ([] as string[]);
+        const requiredDependencies = (select || []).flatMap(field => (options?.virtualFields?.[field]?.dependencies as any[]) || []);
         const fields = Object.keys(type?.keyof?.()?.Values || {}) as any[];
+        const noneSelected = !select?.length;
+        const noneExcluded = !exclude?.length;
         select = (select || [])
             .concat(requiredFields)
             // Add dependencies from selected fields.
@@ -158,16 +162,17 @@ export function makeQueryLoader<
                 ...((options?.virtualFields?.[field]?.dependencies as any[]) || []),
             ])
             .filter((field) => !fields?.length || fields?.indexOf(field) >= 0);
-        const finalKeys = fields
+        const finalKeys = Array.from(new Set(fields
             .filter(notEmpty)
-            .filter((column) => !select?.length || select?.includes(column as any))
+            .filter((column) => noneSelected || select?.includes(column as any))
             // Exclusion takes precedence
             .filter(
                 (column) =>
-                    !exclude?.length ||
+                    noneExcluded ||
                     !exclude?.includes(column) ||
+                    requiredDependencies.includes(column) ||
                     requiredFields.includes(column)
-            );
+            )).values());
 
         // Run another root query, that only selects the column names that aren't excluded, or only ones that are included.
         const finalQuery =
@@ -259,7 +264,7 @@ export function makeQueryLoader<
                 Omit<
                     // Include only the difference of TPostprocessed - TVirtuals
                     // Because only those fields are always present after post-processing
-                    Omit<TPostprocessed, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
+                    Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
                     Pick<
                         TVirtuals & z.infer<TObject>,
                         TSelect | TRequired[number]
@@ -318,7 +323,7 @@ export function makeQueryLoader<
                     const slicedEdges = edges.slice(0, args.limit || undefined);
                     return {
                         edges: slicedEdges as Omit<
-                            Omit<TPostprocessed, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
+                            Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
                             Pick<
                                 TVirtuals & z.infer<TObject>,
                                 TSelect | TRequired[number]

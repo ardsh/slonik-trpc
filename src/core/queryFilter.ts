@@ -33,18 +33,17 @@ type ZodRecursiveFilterConditions<TFilter extends Record<string, z.ZodType>> =
 export const recursiveFilterConditions = <
     TFilter extends Record<string, z.ZodType>
 >(
-    interrFilter: TFilter
+    filter: TFilter
 ): z.ZodObject<ZodRecursiveFilterConditions<TFilter>> => {
-    const coreFilter = z.object(interrFilter).partial();
-    const filter: any = z.lazy(() =>
+    const filterType: any = z.lazy(() =>
         z.object({
-            ...interrFilter,
-            OR: z.array(filter),
-            AND: z.array(filter),
-            NOT: filter,
+            ...filter,
+            OR: z.array(filterType),
+            AND: z.array(filterType),
+            NOT: filterType,
         }).partial()
     );
-    return filter;
+    return filterType;
 };
 
 export type ZodPartial<TFilter extends Record<string, z.ZodType>> =
@@ -70,6 +69,18 @@ export type FilterOptions<
         context: TContext
     ) => SqlFragment[];
 };
+
+/**
+ * Specify context type first
+*/
+export const createFilters = <TContext>(context?: TContext) => <TFilter extends Record<string, z.ZodType>>(filters: TFilter, interpreters: Interpretors<TFilter, TContext>, options?: FilterOptions<TFilter, TContext>) => {
+    return {
+        filters,
+        interpreters,
+        options,
+    } as const;
+}
+
 
 export function makeFilter<
     TFilter extends Record<string, z.ZodType>,

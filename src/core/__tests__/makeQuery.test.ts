@@ -3,6 +3,14 @@ import { sql } from 'slonik';
 import { z } from 'zod';
 import { makeQueryTester } from './makeQueryTester';
 
+import { createFilters, makeFilter } from '../queryFilter';
+import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } from '../../helpers/sqlUtils';
+
+type ReturnSecondArgument<T> = T extends (...args: readonly [any, (infer A)]) => any ? <G extends A=A>(...args: readonly [G]) => G : T;
+const createOptions: ReturnSecondArgument<typeof makeQueryLoader> = ((options) => {
+    return options;
+});
+
 describe("withQueryLoader", () => {
     const { db } = makeQueryTester();
 
@@ -25,7 +33,7 @@ describe("withQueryLoader", () => {
             type: z.object({
                 id: z.number(),
                 uid: z.string(),
-                value: z.string()
+                value: z.string(),
             }),
             postprocess(data) {
                 return {
@@ -143,5 +151,162 @@ describe("withQueryLoader", () => {
             }
         });
         expect(result[0].id).toEqual(8);
+    });
+    const genericOptions = createOptions({
+        query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+        required: ["id"],
+        filters: {
+            filters: {
+                largeIds: z.boolean(),
+                id: z.number(),
+            },
+            interpreters: {
+                largeIds: (filter) => filter ? sql.fragment`"id" > 5` : sql.fragment``,
+                id: num => num ? sql.fragment`"id" = ${num}` : sql.fragment``,
+            }
+        },
+        virtualFields: {
+            dummyField: {
+                resolve: (row) => {
+                    return row.uid + row.id;
+                },
+                dependencies: ["id", "uid"],
+            }
+        },
+        postprocess(data) {
+            return {
+                ...data,
+                postprocessedField: true,
+            }
+        }
+    } as const);
+
+    it("Selects all fields if select is unspecified", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const result = await loader.load({});
+        expect(result[0].id).toEqual(expect.any(Number));
+        expect(result[0].uid).toEqual(expect.any(String));
+        expect(result[0].value).toEqual(expect.any(String));
+    });
+
+    it("Selects required fields even if excluded", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+            required: ["id"],
+        });
+        const result = await loader.load({
+            select: ["value"],
+            exclude: ["id"]
+        });
+        expect(result[0].id).toEqual(expect.any(Number));
+        expect(result[0].value).toEqual(expect.any(String));
+    });
+
+    it("Selects dependent fields even if excluded", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+            required: ["id"],
+        });
+        const result = await loader.load({
+            select: ["dummyField"],
+            // Dummyfield is dependent on uid
+            exclude: ["id", "uid"]
+        });
+        expect(result[0].id).toEqual(expect.any(Number));
+        expect(result[0]).toEqual(expect.objectContaining({
+            id: expect.any(Number),
+            uid: expect.any(String),
+            dummyField: expect.any(String),
+        }));
+        expect(result[0].dummyField).toEqual(expect.any(String));
+        // No need to have the type in this case
+        expect((result[0] as any).uid).toEqual(expect.any(String));
+    });
+
+    // Filters
+
+    const filterOptions = createFilters()({
+        id: arrayifyType(z.number()),
+        uid: arrayifyType(z.string()),
+        largeIds: z.boolean(),
+        date: dateFilterType
+    }, {
+        id: (ids) => arrayFilter(ids, sql.fragment`"id"`, 'numeric'),
+        date: (date) => dateFilter(date, sql.fragment`"date"`),
+        // If true is specified, id must be greater than 5
+        largeIds: (filter) => booleanFilter(filter, sql.fragment`"id" > 5`),
+        uid: (uids) => arrayFilter(uids, sql.fragment`"uid"`),
+    });
+    const getConditions = makeFilter(filterOptions.interpreters, filterOptions.options);
+    type Filter = Parameters<typeof getConditions>[0];
+    const filters = [] as [string, Filter][];
+
+    const testFilters = (filter: Filter) => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+            filters: filterOptions,
+        });
+        return loader.load({
+            where: filter,
+        });
+    }
+
+    it("Filters on single fields", async () => {
+        const items = await testFilters({
+            id: 3,
+        });
+        expect(items).toEqual([expect.objectContaining({
+            id: 3,
+        })]);
+    });
+
+    it("Doesn't validate the filter input for the wrong types (BUG)", async () => {
+        const items = await testFilters({
+            id: "3" as any,
+        });
+        expect(items).toEqual([expect.objectContaining({
+            id: 3,
+        })]);
+    });
+
+    it("Filters on array fields", async () => {
+        const items = await testFilters({
+            uid: ['x', 'z'],
+        });
+        expect(items).toEqual([expect.objectContaining({
+            uid: 'z',
+        }), expect.objectContaining({
+            uid: 'x',
+        })]);
+    });
+
+    it("Filters on date fields", async () => {
+        const items = await testFilters({
+            date: {
+                _lt: "1990-01-01",
+            },
+        });
+        expect(items).toEqual([]);
+    });
+
+    it("OR filters work", async () => {
+        const items = await testFilters({
+            OR: [{
+                id: 3,
+            }, {
+                id: [3, 2],
+            }]
+        });
+        expect(items).toEqual([expect.objectContaining({
+            id: 2,
+        }), expect.objectContaining({
+            id: 3,
+        })]);
     })
+
+    // Pagination
+
+
 });

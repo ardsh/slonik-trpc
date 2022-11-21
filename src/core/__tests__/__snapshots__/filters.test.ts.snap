@@ -1,0 +1,64 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`AND Filters 1`] = `
+{
+  "sql": "((("uid" = ANY($1::"text"[]))) AND (("id" = $2)))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "y",
+      "x",
+    ],
+    3,
+  ],
+}
+`;
+
+exports[`AND Filters nested with OR 1`] = `
+{
+  "sql": "((((("uid" = ANY($1::"text"[]))) OR ((NOT ( "id" > 5 ))))) AND (("id" = $2)))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "y",
+      "x",
+    ],
+    3,
+  ],
+}
+`;
+
+exports[`Filters on array string fields with a single string 1`] = `
+{
+  "sql": "("uid" = ANY($1::"text"[]))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "z",
+    ],
+  ],
+}
+`;
+
+exports[`Filters on array string fields with multiple 1`] = `
+{
+  "sql": "("uid" = ANY($1::"text"[]))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "y",
+      "x",
+    ],
+  ],
+}
+`;
+
+exports[`Filters on date fields 1`] = `
+{
+  "sql": "(("date" > $1))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    "2022-02-03",
+  ],
+}
+`;
