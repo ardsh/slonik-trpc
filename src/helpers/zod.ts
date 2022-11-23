@@ -21,8 +21,6 @@ export const handleZodErrors = (err: Error) => {
                 )} ~ Message: ${issue.message}`
         );
         throw new Error(msg.join('~\n'));
-    } else if (err instanceof ZodError) {
-        throw new Error(err.format()._errors.join('\n'));
     }
     throw err;
 };

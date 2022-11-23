@@ -117,7 +117,8 @@ export function makeQueryLoader<
         TSortable
     >) => {
         const whereCondition = interpretFilters?.(where || ({} as any), context);
-        const zodType = options?.skipChecking ? (z.any() as any) : type;
+        const isPartial = select?.length || exclude?.length; // A more sophisticated check?
+        const zodType = options?.skipChecking ? (z.any() as any) : (isPartial ? type.partial() : type);
         if (typeof options?.postprocess === 'function') {
             dataTransformers.push(options.postprocess);
         }
@@ -215,6 +216,8 @@ export function makeQueryLoader<
             ? z.enum(selectableFields)
             : // If unspecified, any field is allowed to be selected
             (z.string() as never)
+        type ActualFilters = RecursiveFilterConditions<
+            z.infer<ZodPartial<TFilterTypes>>>;
         return z.object({
             /** The fields that should be included. If unspecified, all fields are returned. */
             select: z.array(fields).optional(),
@@ -223,11 +226,12 @@ export function makeQueryLoader<
             limit: z.number().optional(),
             skip: z.number().optional().default(0),
             takeCount: z.boolean().optional(),
+            takeNextPages: z.number().optional(),
             orderBy: z
                 .tuple([sortFields, z.enum(['ASC', 'DESC', 'ASC NULLS LAST', 'DESC NULLS LAST'])])
                 .optional()
                 .nullable(),
-            where: options?.filters?.filters ? recursiveFilterConditions(options?.filters?.filters).nullish() : z.any() as never,
+            where: options?.filters?.filters ? recursiveFilterConditions(options?.filters?.filters).nullish() as unknown as z.ZodType<ActualFilters> : z.any() as never,
         }).partial();
     };
     const self = {
@@ -278,7 +282,7 @@ export function makeQueryLoader<
          * Specify takeCount: true to query the overall count as if no limit had been specified.
          * Otherwise, count will be null.
          */
-        async loadPagination<
+        async loadOffsetPagination<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
             TExclude extends keyof (TVirtuals & z.infer<TObject>) = never
         >(
@@ -291,14 +295,16 @@ export function makeQueryLoader<
                 TSortable
             > & {
                 takeCount?: boolean;
+                takeNextPages?: number;
             }
         ) {
+            const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (args?.limit || 25) + 1;
             const finalQuery = getQuery({
                 ...args,
                 limit:
                     typeof args.limit === 'number'
                         ? // Query an extra row to see if the next page exists
-                          Math.min(Math.max(0, args.limit), 1000) + 1
+                          Math.min(Math.max(0, args.limit), 1000) + extraItems
                         : undefined,
             });
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
@@ -322,7 +328,14 @@ export function makeQueryLoader<
                     const count = await countPromise;
                     const slicedEdges = edges.slice(0, args.limit || undefined);
                     return {
-                        edges: slicedEdges as Omit<
+                        edges: (dataTransformers.length ?
+                        slicedEdges.map(data => {
+                            return dataTransformers.reduce((acc, transformer) => {
+                                return transformer(acc);
+                            }, {
+                                ...data,
+                            })
+                        }) : slicedEdges) as Omit<
                             Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
                             Pick<
                                 TVirtuals & z.infer<TObject>,
@@ -331,6 +344,7 @@ export function makeQueryLoader<
                             Exclude<TExclude, TRequired[number]>
                         >[],
                         hasNextPage: edges.length > slicedEdges.length,
+                        minimumCount: (args.skip || 0) + edges.length,
                         hasPreviousPage: !!args.skip,
                         count,
                     };

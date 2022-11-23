@@ -309,4 +309,145 @@ describe("withQueryLoader", () => {
     // Pagination
 
 
+    it("Doesn't return total count if unspecified", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const query = await loader.loadOffsetPagination({
+            select: ['value'],
+            limit: 5
+        });
+        expect(query.minimumCount).toEqual(expect.any(Number));
+        expect(query.count).toBeNull();
+        const loaded = await loader.load({
+            select: ['value'],
+            limit: 5,
+        });
+        expect(loaded).toEqual(query.edges);
+    });
+
+    it("Returns total count if specified", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const limit = 5;
+        const query = await loader.loadOffsetPagination({
+            select: ['value'],
+            takeCount: true,
+            limit
+        });
+        expect(query.count).toEqual(expect.any(Number));
+        expect(query.minimumCount).toEqual(limit + 1);
+        expect(query.edges[0].postprocessedField).toBeDefined();
+    });
+
+    it("Returns minimal count as skip + edges.length + 1 normally", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const query = await loader.loadOffsetPagination({
+            select: ['value'],
+            limit: 5
+        });
+        expect(query.minimumCount).toEqual(query.edges.length + 1);
+        expect(query.count).toBeNull();
+        const keys = Object.keys(query.edges[0]);
+        expect(keys).toEqual(expect.arrayContaining(["id", "value", "postprocessedField"]));
+        expect(keys).toHaveLength(3);
+    });
+
+    it("Returns minimal count based on next N pages if specified", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const limit = 3;
+        const takeNextPages = 2;
+        const query = await loader.loadOffsetPagination({
+            select: ['value'],
+            limit,
+            takeNextPages,
+        });
+        expect(query.minimumCount).toEqual(query.edges.length + limit*(takeNextPages-1) +1);
+        expect(query.count).toBeNull();
+        expect(query.edges[1].value).toEqual(expect.any(String));
+        expect(query.hasNextPage).toEqual(true);
+        expect(query.hasPreviousPage).toEqual(false);
+    });
+
+    // getLoadArgs
+
+    it("Doesn't allow filtering by unknown columns", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const parser = loader.getLoadArgs({
+            sortableColumns: ["id"],
+        });
+        const where = {
+            largeIds: true,
+            someOtherField: null,
+        }
+        expect(parser.parse({
+            where,
+        })).toEqual({
+            where: {
+                largeIds: true,
+            }
+        });
+    });
+
+    it("Doesn't allow invalid types", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const parser = loader.getLoadArgs({
+            sortableColumns: ["id"],
+        });
+        const where = {
+            id: 'invalidType',
+            largeIds: true,
+            someOtherField: null,
+        }
+        expect(() => parser.parse({
+            where,
+        })).toThrowErrorMatchingSnapshot();
+    });
+
+    it("Doesn't allow sorting by unallowed columns", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const parser = loader.getLoadArgs({
+            sortableColumns: ["value"],
+        });
+        expect(() => parser.parse({
+            orderBy: ["id", "ASC"],
+        })).toThrowErrorMatchingSnapshot();
+    });
+
+    it("Allows sorting by valid columns", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const parser = loader.getLoadArgs({
+            sortableColumns: ["id"],
+        });
+        expect(parser.parse({
+            orderBy: ["id", "ASC"],
+        })).toEqual({
+            orderBy: ["id", "ASC"],
+        });
+    });
+
+    it("Doesn't allow sorting with invalid directions", async () => {
+        const loader = makeQueryLoader(db, {
+            ...genericOptions,
+        });
+        const parser = loader.getLoadArgs({
+            sortableColumns: ["id"],
+        });
+        expect(() => parser.parse({
+            orderBy: ["id", "; DELETE * FROM users"],
+        })).toThrowErrorMatchingSnapshot();
+    });
 });

@@ -1,0 +1,53 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`withQueryLoader Doesn't allow invalid types 1`] = `
+"[
+  {
+    "code": "invalid_type",
+    "expected": "number",
+    "received": "string",
+    "path": [
+      "where",
+      "id"
+    ],
+    "message": "Expected number, received string"
+  }
+]"
+`;
+
+exports[`withQueryLoader Doesn't allow sorting by unallowed columns 1`] = `
+"[
+  {
+    "received": "id",
+    "code": "invalid_enum_value",
+    "options": [
+      "value"
+    ],
+    "path": [
+      "orderBy",
+      0
+    ],
+    "message": "Invalid enum value. Expected 'value', received 'id'"
+  }
+]"
+`;
+
+exports[`withQueryLoader Doesn't allow sorting with invalid directions 1`] = `
+"[
+  {
+    "received": "; DELETE * FROM users",
+    "code": "invalid_enum_value",
+    "options": [
+      "ASC",
+      "DESC",
+      "ASC NULLS LAST",
+      "DESC NULLS LAST"
+    ],
+    "path": [
+      "orderBy",
+      1
+    ],
+    "message": "Invalid enum value. Expected 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST', received '; DELETE * FROM users'"
+  }
+]"
+`;
