@@ -43,7 +43,7 @@ export const booleanFilter = (
     if (bool === true) {
         return trueStatement;
     } else if (bool === false && falseStatement !== null) {
-        return falseStatement || reverseFilter(trueStatement);
+        return falseStatement || invertFilter(trueStatement);
     }
     return null;
 };
@@ -88,7 +88,7 @@ export const arrayFilter = (
     return null;
 };
 
-export const reverseFilter = (condition?: Fragment | null) => {
+export const invertFilter = (condition?: Fragment | null) => {
     if (condition) {
         return sql.fragment`NOT ( ${condition} )`;
     }

@@ -14,7 +14,52 @@ exports[`AND Filters 1`] = `
 }
 `;
 
+exports[`AND Filters 2`] = `
+{
+  "sql": "((("uid" = ANY($1::"text"[]))) AND (("id" = $2)))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "y",
+      "x",
+    ],
+    3,
+  ],
+}
+`;
+
+exports[`AND Filters deeply nested with OR 1`] = `
+{
+  "sql": "((((("uid" = ANY($1::"text"[])) AND ((("value" ILIKE '%cheap%')))) OR ((NOT ( "date" < NOW() ))))) AND (("id" = $2::"numeric"[])))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "y",
+      "x",
+    ],
+    [
+      2,
+      1,
+    ],
+  ],
+}
+`;
+
 exports[`AND Filters nested with OR 1`] = `
+{
+  "sql": "((((("uid" = ANY($1::"text"[]))) OR ((NOT ( "id" > 5 ))))) AND (("id" = $2)))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "y",
+      "x",
+    ],
+    3,
+  ],
+}
+`;
+
+exports[`AND Filters nested with OR 2`] = `
 {
   "sql": "((((("uid" = ANY($1::"text"[]))) OR ((NOT ( "id" > 5 ))))) AND (("id" = $2)))",
   "type": "SLONIK_TOKEN_FRAGMENT",
@@ -40,6 +85,18 @@ exports[`Filters on array string fields with a single string 1`] = `
 }
 `;
 
+exports[`Filters on array string fields with a single string 2`] = `
+{
+  "sql": "("uid" = ANY($1::"text"[]))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "z",
+    ],
+  ],
+}
+`;
+
 exports[`Filters on array string fields with multiple 1`] = `
 {
   "sql": "("uid" = ANY($1::"text"[]))",
@@ -53,7 +110,30 @@ exports[`Filters on array string fields with multiple 1`] = `
 }
 `;
 
+exports[`Filters on array string fields with multiple 2`] = `
+{
+  "sql": "("uid" = ANY($1::"text"[]))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "y",
+      "x",
+    ],
+  ],
+}
+`;
+
 exports[`Filters on date fields 1`] = `
+{
+  "sql": "(("date" > $1))",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    "2022-02-03",
+  ],
+}
+`;
+
+exports[`Filters on date fields 2`] = `
 {
   "sql": "(("date" > $1))",
   "type": "SLONIK_TOKEN_FRAGMENT",

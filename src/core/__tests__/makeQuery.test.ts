@@ -6,8 +6,8 @@ import { makeQueryTester } from './makeQueryTester';
 import { createFilters, makeFilter } from '../queryFilter';
 import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } from '../../helpers/sqlUtils';
 
-type ReturnSecondArgument<T> = T extends (...args: readonly [any, (infer A)]) => any ? <G extends A=A>(...args: readonly [G]) => G : T;
-const createOptions: ReturnSecondArgument<typeof makeQueryLoader> = ((options) => {
+type ReturnFirstArgument<T> = T extends (...args: readonly [(infer A)]) => any ? <G extends A=A>(...args: readonly [G]) => G : T;
+const createOptions: ReturnFirstArgument<typeof makeQueryLoader> = ((options) => {
     return options;
 });
 
@@ -26,9 +26,10 @@ describe("withQueryLoader", () => {
         uid: z.string(),
         value: z.string()
     });
-    
+
     it("Works with fragment", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
+            db,
             query: sql.fragment`SELECT * FROM test_table_bar`,
             type: z.object({
                 id: z.number(),
@@ -49,7 +50,8 @@ describe("withQueryLoader", () => {
     });
 
     it("Works with sql query type", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
+            db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
         });
         const result = await loader.load({});
@@ -58,7 +60,8 @@ describe("withQueryLoader", () => {
     });
 
     it("Returns correct query", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
+            db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
         });
         const query = loader.getQuery({
@@ -70,7 +73,8 @@ describe("withQueryLoader", () => {
     });
 
     it("Returns virtual fields", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
+            db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
             virtualFields: {
                 ids: {
@@ -89,8 +93,28 @@ describe("withQueryLoader", () => {
         expect(loader.getSelectableFields()).toContain("ids");
     });
 
+    it("Returns virtual fields by default if none are selected/excluded", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            virtualFields: {
+                ids: {
+                    resolve: (row) => {
+                        return row.id + row.uid;
+                    },
+                    dependencies: ["id", "uid"],
+                }
+            }
+        });
+        const query = await loader.load({
+            limit: 1
+        });
+        expect(query[0]?.ids).toEqual(expect.any(String));
+        expect(loader.getSelectableFields()).toContain("ids");
+    });
     it("Allows post-processing results", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
+            db,
             query: sql.fragment`SELECT * FROM test_table_bar`,
             type: zodType,
             postprocess(data) {
@@ -110,7 +134,8 @@ describe("withQueryLoader", () => {
     });
 
     it("Allows ordering by specified columns", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
+            db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
             sortableColumns: ["value"]
         });
@@ -122,8 +147,36 @@ describe("withQueryLoader", () => {
         }).sql).toContain(`"value" DESC NULLS LAST`)
     });
 
+    it("Allows sorting by non-selectable columns", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT id, uid FROM test_table_bar`,
+            sortableColumns: ["date"],
+        });
+        expect(() => loader.getQuery({
+            orderBy: ["value" as any, "ASC"]
+        })).toThrow();
+        expect(loader.getQuery({
+            orderBy: ["date", "DESC NULLS LAST"],
+        }).sql).toContain(`"date" DESC NULLS LAST`);
+        expect(await loader.load({
+            orderBy: ["date", "DESC"],
+        })).toEqual(expect.arrayContaining([]));
+    });
+
+    it("Doesn't allow invalid sort direction", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT id, uid FROM test_table_bar`,
+            sortableColumns: ["date"],
+        });
+        expect(() => loader.getQuery({
+            orderBy: ["date", "blabla" as any]
+        })).toThrow(/Invalid enum value./);
+    });
     it("Allows defining filters", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
+            db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
             filters: {
                 filters: {
@@ -153,6 +206,7 @@ describe("withQueryLoader", () => {
         expect(result[0].id).toEqual(8);
     });
     const genericOptions = createOptions({
+        db,
         query: sql.type(zodType)`SELECT * FROM test_table_bar`,
         required: ["id"],
         filters: {
@@ -182,7 +236,7 @@ describe("withQueryLoader", () => {
     } as const);
 
     it("Selects all fields if select is unspecified", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
         });
         const result = await loader.load({});
@@ -192,12 +246,14 @@ describe("withQueryLoader", () => {
     });
 
     it("Selects required fields even if excluded", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
             required: ["id"],
+            sortableColumns: ["id"]
         });
         const result = await loader.load({
             select: ["value"],
+            orderBy: ["id", "ASC"],
             exclude: ["id"]
         });
         expect(result[0].id).toEqual(expect.any(Number));
@@ -205,7 +261,7 @@ describe("withQueryLoader", () => {
     });
 
     it("Selects dependent fields even if excluded", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
             required: ["id"],
         });
@@ -244,7 +300,7 @@ describe("withQueryLoader", () => {
     const filters = [] as [string, Filter][];
 
     const testFilters = (filter: Filter) => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
             filters: filterOptions,
         });
@@ -310,11 +366,13 @@ describe("withQueryLoader", () => {
 
 
     it("Doesn't return total count if unspecified", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
+            sortableColumns: ["value"]
         });
         const query = await loader.loadOffsetPagination({
             select: ['value'],
+            orderBy: ["value", "ASC NULLS LAST"],
             limit: 5
         });
         expect(query.minimumCount).toEqual(expect.any(Number));
@@ -327,7 +385,7 @@ describe("withQueryLoader", () => {
     });
 
     it("Returns total count if specified", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
         });
         const limit = 5;
@@ -342,11 +400,13 @@ describe("withQueryLoader", () => {
     });
 
     it("Returns minimal count as skip + edges.length + 1 normally", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
+            sortableColumns: ["uid"],
         });
         const query = await loader.loadOffsetPagination({
             select: ['value'],
+            orderBy: ["uid", "DESC"],
             limit: 5
         });
         expect(query.minimumCount).toEqual(query.edges.length + 1);
@@ -357,7 +417,7 @@ describe("withQueryLoader", () => {
     });
 
     it("Returns minimal count based on next N pages if specified", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
         });
         const limit = 3;
@@ -377,7 +437,7 @@ describe("withQueryLoader", () => {
     // getLoadArgs
 
     it("Doesn't allow filtering by unknown columns", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
         });
         const parser = loader.getLoadArgs({
@@ -397,7 +457,7 @@ describe("withQueryLoader", () => {
     });
 
     it("Doesn't allow invalid types", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
         });
         const parser = loader.getLoadArgs({
@@ -414,7 +474,7 @@ describe("withQueryLoader", () => {
     });
 
     it("Doesn't allow sorting by unallowed columns", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
         });
         const parser = loader.getLoadArgs({
@@ -426,7 +486,7 @@ describe("withQueryLoader", () => {
     });
 
     it("Allows sorting by valid columns", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
         });
         const parser = loader.getLoadArgs({
@@ -440,7 +500,7 @@ describe("withQueryLoader", () => {
     });
 
     it("Doesn't allow sorting with invalid directions", async () => {
-        const loader = makeQueryLoader(db, {
+        const loader = makeQueryLoader({
             ...genericOptions,
         });
         const parser = loader.getLoadArgs({
@@ -449,5 +509,123 @@ describe("withQueryLoader", () => {
         expect(() => parser.parse({
             orderBy: ["id", "; DELETE * FROM users"],
         })).toThrowErrorMatchingSnapshot();
+    });
+
+    it("Allows specifying the selectable columns, and only allows selecting those", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            selectableColumns: ["id"]
+        });
+        const parser = loader.getLoadArgs({});
+        expect(() => parser.parse({
+            select: ["id", "uid"]
+        })).toThrow(/uid/)
+        expect(Object.keys(await loader.load({
+            select: ["id", "uid" as any],
+        }))).not.toContain("uid");
+    });
+
+    it("Allows overwriting the selectable columns in get load args", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            selectableColumns: ["id"]
+        });
+        const parser = loader.getLoadArgs({
+            selectableColumns: ["uid"]
+        });
+        expect(parser.parse({
+            select: ["uid"]
+        })).toEqual({
+            select: ["uid"]
+        });
+    });
+
+    // getSelectableFields
+
+    it("returns all the fields as selectable by default", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const selectable = loader.getSelectableFields();
+        expect(selectable).toEqual(expect.arrayContaining(["id", "uid", "dummyField", "value"]));
+        expect(selectable).toHaveLength(4);
+    });
+
+    it("returns only the fields that are specified as selectable", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            selectableColumns: ["id", "uid"],
+        });
+        const selectable = loader.getSelectableFields();
+        expect(selectable).toEqual(expect.arrayContaining(["id", "uid"]));
+        expect(selectable).toHaveLength(2);
+    });
+
+    it("If fields are specified as non-selectable, shouldn't be allowed to be selected", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            selectableColumns: ["id", "uid"],
+        });
+        const selectable = loader.getQuery({
+            select: ["id", "value" as any, "uid"]
+        });
+        expect(selectable.sql).not.toContain("value");
+        expect(selectable.sql).toContain("uid");
+    });
+
+    it("Required fields take precedence even if non-selectable", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            required: ["value", "uid"],
+            defaultExcludedColumns: ["id", "dummyField"],
+            selectableColumns: ["id", "dummyField"],
+        });
+        const selectable = loader.getQuery({});
+        expect(selectable.sql).toContain("value");
+        expect(selectable.sql).toContain("uid");
+        const data = await loader.load({});
+        expect(Object.keys(data[0])).toEqual(expect.arrayContaining([
+            "uid", "value", "postprocessedField"
+        ]));
+    });
+
+    // defaultExcludedColumns
+    it("Allows specifying the default excluded columns", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            defaultExcludedColumns: ["dummyField"]
+        });
+        const data = await loader.load({
+            limit: 1,
+        });
+        expect((data[0] as any).dummyField).toBeUndefined();
+
+        // Selected fields have precedence over default excluded
+        expect((await loader.load({
+            limit: 1,
+            select: ["dummyField"]
+        }).then(a => a[0]) as any).dummyField).toEqual(expect.any(String));
+    });
+
+    it("Excludes virtual fields if specified on default excluded", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            defaultExcludedColumns: ["dummyField", "value"],
+        });
+        const data = await loader.load({
+            limit: 1,
+        });
+        expect(Object.keys(data[0])).toEqual(["id", "uid", "postprocessedField"]);
+    });
+
+    it("Default excluded columns can still be selected explicitly", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            defaultExcludedColumns: ["uid"]
+        });
+        expect((await loader.load({
+            limit: 1,
+            select: ["uid"]
+        }).then(a => a[0])).uid).toEqual(expect.any(String));
     });
 });

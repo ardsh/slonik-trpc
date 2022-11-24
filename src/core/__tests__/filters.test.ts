@@ -1,6 +1,6 @@
 import { sql } from 'slonik';
 import { z } from 'zod';
-import { createFilters, makeFilter } from '../queryFilter';
+import { createFilters, makeFilter, mergeFilters } from '../queryFilter';
 import { arrayFilter, booleanFilter, dateFilter, dateFilterType } from '../../helpers/sqlUtils';
 import { arrayifyType } from '../../helpers/zod';
 
@@ -62,5 +62,59 @@ addFilter("AND Filters nested with OR", ({
 it.each(filters)(
     "%s", (description, data) => {
         expect(getConditions(data)).toMatchSnapshot();
+    }
+);
+
+
+const otherFilters = createFilters()({
+    isCheap: z.boolean(),
+    isBeforeNow: z.boolean(),
+}, {
+    isCheap: (filter) => booleanFilter(filter, sql.fragment`"value" ILIKE '%cheap%'`),
+    isBeforeNow: (filter) => booleanFilter(filter, sql.fragment`"date" < NOW()`),
+});
+
+const anotherFilters = createFilters()({
+    randomNumber: arrayifyType(z.number()),
+    valueFilter: arrayifyType(z.string()),
+}, {
+    randomNumber: (text) => sql.fragment`"id" = ${sql.array(text as number[], 'numeric')}`,
+    valueFilter: (value) => arrayFilter(value, sql.fragment`"value"`),
+});
+
+const combinedFilter = mergeFilters([filtersOptions, otherFilters, anotherFilters]);
+
+// const loader = makeQueryLoader({
+//     query: sql.type(z.object({ id: z.number() }))`SELECT 2 AS "id"`,
+//     filters: combinedFilter,
+// });
+
+const getCombinedConditions = makeFilter(createFilters()(combinedFilter.filters, combinedFilter.interpreters).interpreters);
+
+type CombinedFilter = Parameters<typeof getCombinedConditions>[0];
+const combined = filters.slice() as [string, CombinedFilter][];
+
+const addCombinedFilter = (text: string, filter: CombinedFilter) => {
+    combined.push([text, filter]);
+}
+
+addCombinedFilter("AND Filters deeply nested with OR", ({
+    AND: [{
+        OR: [{
+            uid: ['y', 'x'],
+            AND: [{
+                isCheap: true,
+            }]
+        }, {
+            isBeforeNow: false,
+        }]
+    }, {
+        randomNumber: [2, 1],
+    }]
+}));
+
+it.each(combined)(
+    "%s", (description, data) => {
+        expect(getCombinedConditions(data)).toMatchSnapshot();
     }
 );

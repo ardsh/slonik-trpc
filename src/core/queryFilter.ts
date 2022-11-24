@@ -73,12 +73,37 @@ export type FilterOptions<
 /**
  * Specify context type first
 */
-export const createFilters = <TContext>(context?: TContext) => <TFilter extends Record<string, z.ZodType>>(filters: TFilter, interpreters: Interpretors<TFilter, TContext>, options?: FilterOptions<TFilter, TContext>) => {
+export const createFilters = <TContext=any>() => <TFilter extends Record<string, z.ZodType>>(filters: TFilter, interpreters: Interpretors<TFilter, TContext>, options?: FilterOptions<TFilter, TContext>) => {
     return {
         filters,
         interpreters,
         options,
     } as const;
+}
+
+type Filters<T extends Record<string, z.ZodType>, TContext> = {
+    filters: T,
+    interpreters: Interpretors<T, TContext>
+}
+type UnionToIntersection<U> = 
+  (U extends any ? (k: U)=>void : never) extends ((k: infer I)=>void) ? I : never
+
+export const mergeFilters = <TFilter extends Filters<any, TContext>, TContext=any>(filters: readonly TFilter[], options?: FilterOptions<TFilter["filters"], TContext>) => {
+    return {
+        filters: filters.reduce((acc, filter) => {
+            return {
+                ...acc,
+                ...filter.filters,
+            }
+        }, {}),
+        interpreters: filters.reduce((acc, filter) => {
+            return {
+                ...acc,
+                ...filter.interpreters,
+            }
+        }, {}),
+        options,
+    } as UnionToIntersection<TFilter>;
 }
 
 

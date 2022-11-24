@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { sql, CommonQueryMethods } from 'slonik';
 import { Fragment, Query } from './types';
-import { handleZodErrors } from './zod';
 
 const planOutput = z
     .object({
@@ -59,7 +58,6 @@ export function makeQueryAnalyzer(db: CommonQueryMethods) {
                         plan: result['Plan'],
                     };
                 })
-                .catch(handleZodErrors);
         },
     };
 }
