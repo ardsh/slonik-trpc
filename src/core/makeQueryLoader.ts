@@ -47,7 +47,7 @@ const countQueryType = z.object({
 
 export function makeQueryLoader<
     TFilterTypes extends Record<string, z.ZodTypeAny>,
-    TContext,
+    TContextZod extends z.ZodTypeAny,
     TFragment extends SqlFragment | QuerySqlToken,
     TRequired extends readonly [keyof z.infer<TObject>, ...(keyof z.infer<TObject>)[]]=[never],
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
@@ -57,22 +57,24 @@ export function makeQueryLoader<
     TSortable extends string = never,
     TSelectable extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
+    TDefaultExcluded extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol> = never
 >(options: {
     query: TFragment,
     type?: TObject,
+    contextParser?: TContextZod,
     db?: Pick<CommonQueryMethods, "any">
     /** If you specify custom filters, make sure the fields they reference are accessible from the main query*/
     filters?: {
         filters: TFilterTypes,
-        interpreters: Interpretors<TFilterTypes, TContext>,
-        options?: FilterOptions<TFilterTypes, TContext>
+        interpreters: Interpretors<TFilterTypes, z.infer<TContextZod>>,
+        options?: FilterOptions<TFilterTypes, z.infer<TContextZod>>
     }
     /** If true, zod type-checking validation will be skipped
      * and no schema validation errors will be thrown */
     skipChecking?: boolean;
     sortableColumns?: readonly [TSortable, ...TSortable[]];
     selectableColumns?: readonly [TSelectable, ...TSelectable[]];
-    defaultExcludedColumns?: readonly [Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>, ...Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>[]];
+    defaultExcludedColumns?: readonly [TDefaultExcluded, ...TDefaultExcluded[]];
     /**
      * Specify a mapping of virtual fields, with their dependencies
     */
@@ -95,7 +97,7 @@ export function makeQueryLoader<
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
     if (!type || !type.keyof || !type.partial) throw new Error('Invalid query type provided: ' + (type));
     type TFilter = z.infer<ZodPartial<TFilterTypes>>;
-    const interpretFilters = options?.filters?.interpreters ? makeFilter<TFilterTypes, TContext>(options.filters.interpreters, options.filters?.options) : null;
+    const interpretFilters = options?.filters?.interpreters ? makeFilter<TFilterTypes, z.infer<TContextZod>>(options.filters.interpreters, options.filters?.options) : null;
     const dataTransformers = [] as ((data: any) => any)[];
     const sortFields = options?.sortableColumns?.length
             ? z.enum(options.sortableColumns)
@@ -115,7 +117,7 @@ export function makeQueryLoader<
         exclude,
     }: LoadParameters<
         TFilter,
-        TContext,
+        z.infer<TContextZod>,
         TPostprocessed & TVirtuals & z.infer<TObject>,
         (TSelect | TRequired[number]) & TSelectable,
         TExclude,
@@ -201,14 +203,13 @@ export function makeQueryLoader<
                 : baseQuery;
         return finalQuery;
     };
-    type SelectableField = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>;
     const getSelectableFields = () => {
         const selectable = options?.selectableColumns;
         const columns = Object.keys(options?.virtualFields || {}).concat(
             Object.keys(type?.keyof?.()?.Values || {})
         ) as [
-            SelectableField,
-            ...SelectableField[]
+            TSelectable,
+            ...TSelectable[]
         ];
         if (selectable?.length) {
             return columns.filter(column => selectable.indexOf(column as any) >= 0) as never;
@@ -217,15 +218,15 @@ export function makeQueryLoader<
     };
 
     const getLoadArgs = <
-        TFields extends readonly [string, ...string[]] = [TSelectable, ...TSelectable[]],
-        TSort extends readonly [string, ...string[]] = [TSortable, ...TSortable[]],
+        TFields extends string = TSelectable,
+        TSort extends string = TSortable,
     >(
         {
             sortableColumns = options?.sortableColumns as never,
             selectableColumns = options?.selectableColumns as never,
         }: {
-            sortableColumns?: TSort;
-            selectableColumns?: TFields;
+            sortableColumns?: [TSort, ...TSort[]];
+            selectableColumns?: [TFields, ...TFields[]];
         } = {} as never
     ) => {
         const sortFields = sortableColumns?.length
@@ -261,12 +262,12 @@ export function makeQueryLoader<
         getQuery,
         // By default, select all fields (string covers all), and don't exclude any fields
         async load<
-            TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
+            TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TExclude extends keyof (TVirtuals & z.infer<TObject>) = never
         >(
             args: LoadParameters<
                 TFilter,
-                TContext,
+                z.infer<TContextZod>,
                 TPostprocessed & TVirtuals & z.infer<TObject>,
                 (TSelect | TRequired[number]) & TSelectable,
                 TExclude,
@@ -294,9 +295,9 @@ export function makeQueryLoader<
                     Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
                     Pick<
                         TVirtuals & z.infer<TObject>,
-                        TSelect | TRequired[number]
+                        [TSelect] extends [never] ? Exclude<keyof (TVirtuals & z.infer<TObject>), TDefaultExcluded> : (TSelect | TRequired[number])
                     >,
-                    Exclude<TExclude, TRequired[number]>
+                    [TExclude] extends [never] ? Exclude<TDefaultExcluded, TSelect> : Exclude<TExclude, TRequired[number]>
                 >[]
             >;
         },
@@ -306,12 +307,12 @@ export function makeQueryLoader<
          * Otherwise, count will be null.
          */
         async loadOffsetPagination<
-            TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
+            TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TExclude extends keyof (TVirtuals & z.infer<TObject>) = never
         >(
             args: LoadParameters<
                 TFilter,
-                TContext,
+                z.infer<TContextZod>,
                 TPostprocessed & TVirtuals & z.infer<TObject>,
                 (TSelect | TRequired[number]) & TSelectable,
                 TExclude,
@@ -359,9 +360,9 @@ export function makeQueryLoader<
                             Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
                             Pick<
                                 TVirtuals & z.infer<TObject>,
-                                TSelect | TRequired[number]
+                                [TSelect] extends [never] ? Exclude<keyof (TVirtuals & z.infer<TObject>), TDefaultExcluded> : (TSelect | TRequired[number])
                             >,
-                            Exclude<TExclude, TRequired[number]>
+                            [TExclude] extends [never] ? Exclude<TDefaultExcluded, TSelect> : Exclude<TExclude, TRequired[number]>
                         >[],
                         hasNextPage: edges.length > slicedEdges.length,
                         minimumCount: (args.skip || 0) + edges.length,

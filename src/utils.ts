@@ -12,6 +12,7 @@ export {
 } from './helpers/sqlUtils';
 
 export {
+    mergeFilters,
     createFilters
 } from './core/queryFilter';
 
