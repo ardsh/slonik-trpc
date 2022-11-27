@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.2.2
+
+### Patch Changes
+
+-   ccf3bce: Added async promises to virtual fields
+
 ## 0.2.0
 
 ### Minor Changes
