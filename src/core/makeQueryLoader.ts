@@ -45,6 +45,27 @@ const countQueryType = z.object({
     count: z.number(),
 });
 
+function resolveTransformers<TData>(dataTransformers: any[], rows: readonly TData[]): Promise<TData[]> {
+    return Promise.all(rows.map(async (data) => {
+        const promises = await Promise.all(dataTransformers.map(async (transformer) => {
+            const newData = await transformer(data);
+            for (const key in newData) {
+                // TODO: Separate virtual fields from overall transformers to not need to await each key
+                newData[key] = await newData[key];
+            }
+            return newData ?? data;
+        }));
+        return promises.reduce((acc, transformed) => {
+            return {
+                ...acc,
+                ...transformed,
+            }
+        }, {
+            ...data,
+        });
+    }));
+}
+
 export function makeQueryLoader<
     TFilterTypes extends Record<string, z.ZodTypeAny>,
     TContextZod extends z.ZodTypeAny,
@@ -81,7 +102,7 @@ export function makeQueryLoader<
     virtualFields?: {
         [x in keyof TVirtuals]?: {
             /** Return the virtual field */
-            resolve: (row: z.infer<TObject>) => TVirtuals[x];
+            resolve: (row: z.infer<TObject>) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
     };
@@ -91,7 +112,7 @@ export function makeQueryLoader<
      * Do NOT use this to declare virtual fields, it's much more limited.
      * Instead, use this when it's necessary to change an existing field, e.g. easier formatting.
      * */
-    postprocess?: (data: z.infer<TObject>) => TPostprocessed;
+    postprocess?: (data: z.infer<TObject>) => PromiseLike<TPostprocessed> | TPostprocessed;
 }) {
     const query = options.query;
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
@@ -279,13 +300,7 @@ export function makeQueryLoader<
             const finalQuery = getQuery(args);
             return db.any(finalQuery).then(rows => {
                 if (dataTransformers.length) {
-                    return rows.map((data) => {
-                        return dataTransformers.reduce((acc, transformer) => {
-                            return transformer(acc);
-                        }, {
-                            ...data,
-                        })
-                    });
+                    return resolveTransformers(dataTransformers, rows);
                 }
                 return rows;
             }) as Promise<
@@ -349,14 +364,8 @@ export function makeQueryLoader<
                 .then(async (edges) => {
                     const slicedEdges = edges.slice(0, args.limit || undefined);
                     return {
-                        edges: (dataTransformers.length ?
-                        slicedEdges.map(data => {
-                            return dataTransformers.reduce((acc, transformer) => {
-                                return transformer(acc);
-                            }, {
-                                ...data,
-                            })
-                        }) : slicedEdges) as Omit<
+                        edges: (dataTransformers.length ? await resolveTransformers(dataTransformers, slicedEdges)
+                        : slicedEdges) as Omit<
                             Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
                             Pick<
                                 TVirtuals & z.infer<TObject>,

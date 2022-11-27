@@ -116,17 +116,16 @@ describe("withQueryLoader", () => {
         });
         expect(query[0]?.ids).toEqual(expect.any(String));
         expect(loader.getSelectableFields()).toContain("ids");
-        expectTypeOf(query[0]).toHaveProperty("ids")
+        expectTypeOf(query[0]).toEqualTypeOf<{ id: number, ids: string, uid: string, value: string }>()
     });
     it("Doesn't return virtual fields by default if some others are selected", async () => {
+        const resolve = jest.fn((row) => row.id + row.uid);
         const loader = makeQueryLoader({
             db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
             virtualFields: {
                 ids: {
-                    resolve: (row) => {
-                        return row.id + row.uid;
-                    },
+                    resolve,
                     dependencies: ["id", "uid"],
                 }
             }
@@ -139,6 +138,73 @@ describe("withQueryLoader", () => {
         expect(query[0]?.ids).toBeUndefined();
         expectTypeOf(query[0]).toEqualTypeOf<{ id: number, uid: string }>();
         expect(loader.getSelectableFields()).toContain("ids");
+        expect(resolve).not.toHaveBeenCalled();
+    });
+
+    
+    it("Allows returning promises from virtual fields", async () => {
+        const resolve = jest.fn(async (row) => {
+            return Promise.resolve(row.id);
+        });
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            virtualFields: {
+                ids: {
+                    resolve: async (row) => {
+                        return Promise.resolve(row.id + row.uid);
+                    },
+                    dependencies: ["id", "uid"],
+                }
+            }
+        });
+        const query = await loader.load({
+            limit: 1,
+            select: ['ids'],
+        });
+        expect(query[0]).toEqual(expect.objectContaining({
+            ids: expect.any(String),
+        }));
+        expect(query[0]?.ids).toEqual(expect.any(String));
+        expect(loader.getSelectableFields()).toContain("ids");
+        expectTypeOf(query[0]).toHaveProperty("ids");
+        expectTypeOf(query[0].ids).toEqualTypeOf<string>();
+    });
+
+
+    it("Supports multiple (mixed) virtual fields", async () => {
+        const resolve = jest.fn(async (row) => {
+            return Promise.resolve(row.id);
+        });
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            virtualFields: {
+                ids: {
+                    resolve: async (row) => {
+                        return Promise.resolve(row.id + row.uid);
+                    },
+                    dependencies: ["id", "uid"],
+                },
+                field: {
+                    resolve: row => row.id,
+                    dependencies: ["id"],
+                }
+            }
+        });
+        const query = await loader.loadOffsetPagination({
+            limit: 1,
+            select: ['ids', 'field'],
+        });
+        expect(query.edges[0]).toEqual(expect.objectContaining({
+            ids: expect.any(String),
+            field: expect.any(Number),
+        }));
+        expect(query.edges[0]?.ids).toEqual(expect.any(String));
+        expect(query.edges[0]?.field).toEqual(expect.any(Number));
+        expect(loader.getSelectableFields()).toContain("ids");
+        expectTypeOf(query.edges[0]).toHaveProperty("ids");
+        expectTypeOf(query.edges[0]).toEqualTypeOf<{ ids: string, field: number }>();
     });
     it("Allows post-processing results", async () => {
         const loader = makeQueryLoader({
@@ -152,6 +218,29 @@ describe("withQueryLoader", () => {
                 }
             }
         });
+        const query = await loader.loadOffsetPagination({
+            select: ['value'],
+            limit: 1
+        });
+        expect(query.edges[0]?.someOtherField).toEqual('blabla');
+        expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string, someOtherField: string }>();
+        expect(loader.getSelectableFields()).not.toContain("someOtherField")
+        expectTypeOf(loader.getSelectableFields()[0]).toEqualTypeOf<["id", "uid", "value"][number]>()
+    });
+
+    it("Allows post-processing results as a promise", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.fragment`SELECT * FROM test_table_bar`,
+            type: zodType,
+            async postprocess(data) {
+                const result = await new Promise<string>(res => res('blabla'));
+                return {
+                    ...data,
+                    someOtherField: result,
+                }
+            }
+        });
         const query = await loader.load({
             select: ['value'],
             limit: 1
@@ -160,6 +249,49 @@ describe("withQueryLoader", () => {
         expectTypeOf(query[0]).toEqualTypeOf<{ value: string, someOtherField: string }>();
         expect(loader.getSelectableFields()).not.toContain("someOtherField")
         expectTypeOf(loader.getSelectableFields()[0]).toEqualTypeOf<["id", "uid", "value"][number]>()
+    });
+
+    it("Throws errors that occur during post-processing", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.fragment`SELECT * FROM test_table_bar`,
+            type: zodType,
+            async postprocess(data) {
+                const result = await new Promise<string>((res, rej) => rej('Error fetching!'));
+                return {
+                    ...data,
+                    someOtherField: result,
+                }
+            }
+        });
+
+        // eslint-disable-next-line jest/valid-expect
+        expect(loader.load({
+            select: ['value'],
+            limit: 1
+        })).rejects.toEqual("Error fetching!");
+    });
+
+    it("Throws errors that occur in virtual fields", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.fragment`SELECT * FROM test_table_bar`,
+            type: zodType,
+            virtualFields: {
+                ids: {
+                    async resolve(row) {
+                        return Promise.reject('Error fetching!');
+                    },
+                    dependencies: [],
+                }
+            }
+        });
+
+        // eslint-disable-next-line jest/valid-expect
+        expect(loader.load({
+            select: ['value', 'ids'],
+            limit: 1
+        })).rejects.toEqual("Error fetching!");
     });
 
     it("Allows ordering by specified columns", async () => {
