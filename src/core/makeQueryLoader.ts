@@ -41,6 +41,25 @@ type LoadParameters<
     where?: RecursiveFilterConditions<TFilter>;
 };
 
+type ResultType<
+    TObject extends z.AnyZodObject,
+    TVirtuals extends Record<string, any>,
+    TPostprocessed extends Record<string, any>,
+    TDefaultExcluded extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
+    TRequired extends readonly [keyof z.infer<TObject>, ...(keyof z.infer<TObject>)[]],
+    TSelect extends keyof (TVirtuals & z.infer<TObject>),
+    TExclude extends keyof (TVirtuals & z.infer<TObject>)
+> = Omit<
+    // Include only the difference of TPostprocessed - TVirtuals
+    // Because only those fields are always present after post-processing
+    Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
+    Pick<
+        TVirtuals & z.infer<TObject>,
+        [TSelect] extends [never] ? Exclude<keyof (TVirtuals & z.infer<TObject>), TDefaultExcluded> : (TSelect | TRequired[number])
+    >,
+    [TExclude] extends [never] ? Exclude<TDefaultExcluded, TSelect> : Exclude<TExclude, TRequired[number]>
+>;
+
 const countQueryType = z.object({
     count: z.number(),
 });
@@ -74,7 +93,7 @@ export function makeQueryLoader<
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
     TVirtuals extends Record<string, any> = z.infer<TObject>,
     TPostprocessed extends Record<string, any> = z.infer<TObject>,
-    // TSortable extends readonly [string, ...(string)[]] = [never],
+    // TSortable extends keyof z.infer<TObject> = never,
     TSortable extends string = never,
     TSelectable extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
@@ -90,9 +109,6 @@ export function makeQueryLoader<
         interpreters: Interpretors<TFilterTypes, z.infer<TContextZod>>,
         options?: FilterOptions<TFilterTypes, z.infer<TContextZod>>
     }
-    /** If true, zod type-checking validation will be skipped
-     * and no schema validation errors will be thrown */
-    skipChecking?: boolean;
     sortableColumns?: readonly [TSortable, ...TSortable[]];
     selectableColumns?: readonly [TSelectable, ...TSelectable[]];
     defaultExcludedColumns?: readonly [TDefaultExcluded, ...TDefaultExcluded[]];
@@ -146,8 +162,9 @@ export function makeQueryLoader<
     >) => {
         const whereCondition = interpretFilters?.(where || ({} as any), context);
         const isPartial = select?.length || exclude?.length || options.defaultExcludedColumns?.length;
-        // A more sophisticated check?
-        const zodType = options?.skipChecking ? (z.any() as any) : (isPartial ? type.partial() : type);
+        // TODO: Add virtual fields transformations to zodType with transform optionally.
+        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TPostprocessed, TDefaultExcluded, TRequired, TSelect, TExclude>>
+            = (isPartial ? type.partial() : type) as any;
         if (options.defaultExcludedColumns && !exclude) {
             exclude = Array.from(options.defaultExcludedColumns)
                 // Select has precedence over default exclusion
@@ -195,7 +212,6 @@ export function makeQueryLoader<
             .filter(field => !selectable?.length || selectable.indexOf(field) >= 0)
             .concat(requiredFields as never)
             // Add dependencies from selected fields.
-            // .flatMap(field => [field, ...(options?.dependencies?.[field] as any[])])
             .flatMap((field) => [
                 field,
                 ...((options?.virtualFields?.[field]?.dependencies as any[]) || []),
@@ -303,18 +319,7 @@ export function makeQueryLoader<
                     return resolveTransformers(dataTransformers, rows);
                 }
                 return rows;
-            }) as Promise<
-                Omit<
-                    // Include only the difference of TPostprocessed - TVirtuals
-                    // Because only those fields are always present after post-processing
-                    Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
-                    Pick<
-                        TVirtuals & z.infer<TObject>,
-                        [TSelect] extends [never] ? Exclude<keyof (TVirtuals & z.infer<TObject>), TDefaultExcluded> : (TSelect | TRequired[number])
-                    >,
-                    [TExclude] extends [never] ? Exclude<TDefaultExcluded, TSelect> : Exclude<TExclude, TRequired[number]>
-                >[]
-            >;
+            });
         },
         /**
          * Returns the data in a pagination-convenient form.
@@ -364,15 +369,7 @@ export function makeQueryLoader<
                 .then(async (edges) => {
                     const slicedEdges = edges.slice(0, args.limit || undefined);
                     return {
-                        edges: (dataTransformers.length ? await resolveTransformers(dataTransformers, slicedEdges)
-                        : slicedEdges) as Omit<
-                            Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
-                            Pick<
-                                TVirtuals & z.infer<TObject>,
-                                [TSelect] extends [never] ? Exclude<keyof (TVirtuals & z.infer<TObject>), TDefaultExcluded> : (TSelect | TRequired[number])
-                            >,
-                            [TExclude] extends [never] ? Exclude<TDefaultExcluded, TSelect> : Exclude<TExclude, TRequired[number]>
-                        >[],
+                        edges: (dataTransformers.length ? await resolveTransformers(dataTransformers, slicedEdges) : slicedEdges),
                         hasNextPage: edges.length > slicedEdges.length,
                         minimumCount: (args.skip || 0) + edges.length,
                         hasPreviousPage: !!args.skip,

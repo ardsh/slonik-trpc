@@ -118,6 +118,7 @@ describe("withQueryLoader", () => {
         expect(loader.getSelectableFields()).toContain("ids");
         expectTypeOf(query[0]).toEqualTypeOf<{ id: number, ids: string, uid: string, value: string }>()
     });
+
     it("Doesn't return virtual fields by default if some others are selected", async () => {
         const resolve = jest.fn((row) => row.id + row.uid);
         const loader = makeQueryLoader({
@@ -141,7 +142,6 @@ describe("withQueryLoader", () => {
         expect(resolve).not.toHaveBeenCalled();
     });
 
-    
     it("Allows returning promises from virtual fields", async () => {
         const resolve = jest.fn(async (row) => {
             return Promise.resolve(row.id);
@@ -170,7 +170,6 @@ describe("withQueryLoader", () => {
         expectTypeOf(query[0]).toHaveProperty("ids");
         expectTypeOf(query[0].ids).toEqualTypeOf<string>();
     });
-
 
     it("Supports multiple (mixed) virtual fields", async () => {
         const resolve = jest.fn(async (row) => {
@@ -206,6 +205,7 @@ describe("withQueryLoader", () => {
         expectTypeOf(query.edges[0]).toHaveProperty("ids");
         expectTypeOf(query.edges[0]).toEqualTypeOf<{ ids: string, field: number }>();
     });
+
     it("Allows post-processing results", async () => {
         const loader = makeQueryLoader({
             db,
@@ -312,7 +312,7 @@ describe("withQueryLoader", () => {
     it("Allows sorting by non-selectable columns", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT id, uid FROM test_table_bar`,
+            query: sql.type(zodType)`SELECT id, uid, value FROM test_table_bar`,
             sortableColumns: ["date"],
         });
         expect(() => loader.getQuery({
@@ -338,6 +338,7 @@ describe("withQueryLoader", () => {
             orderBy: ["date", "blabla"]
         })).toThrow(/Invalid enum value./);
     });
+
     it("Allows defining filters", async () => {
         const loader = makeQueryLoader({
             db,
@@ -371,6 +372,7 @@ describe("withQueryLoader", () => {
         expectTypeOf(result[0]).toEqualTypeOf<{ value: string, id: number }>();
         expect(result[0].id).toEqual(8);
     });
+
     const genericOptions = createOptions({
         db,
         query: sql.type(zodType)`SELECT * FROM test_table_bar`,
@@ -890,5 +892,21 @@ describe("withQueryLoader", () => {
         }).then(a => a[0]);
         expect(data.uid).toEqual(expect.any(String));
         expectTypeOf(data).toEqualTypeOf<{ uid: string, postprocessedField: boolean, id: number }>();
-    })
+    });
+
+    it("Query parser is type-safe by default", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+        });
+        const query = loader.getQuery({
+            select: ['id'],
+            limit: 1,
+        });
+
+        const data = await db.any(query);
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number }>();
+        expect(data).toEqual([{ id: expect.any(Number) }]);
+    });
+
 });

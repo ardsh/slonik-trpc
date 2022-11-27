@@ -1,5 +1,6 @@
 import { createPool, CommonQueryMethods, sql } from 'slonik';
 import { createQueryLoggingInterceptor } from "slonik-interceptor-query-logging";
+import { createResultParserInterceptor } from '../../helpers/resultParserInterceptor';
 
 function getPostgresUrl(): string {
     return process.env.POSTGRES_DSN || `postgres://${encodeURIComponent(process.env.PGUSER || 'postgres')}:${encodeURIComponent(process.env.PGPASSWORD || '')}@${
@@ -9,7 +10,10 @@ function getPostgresUrl(): string {
 
 export function makeQueryTester() {
     const pool = createPool(getPostgresUrl(), {
-        interceptors: [createQueryLoggingInterceptor()],
+        interceptors: [
+            createQueryLoggingInterceptor(),
+            createResultParserInterceptor(),
+        ],
     });
     const db: CommonQueryMethods = new Proxy({} as never, {
         get(target, prop: keyof CommonQueryMethods) {
@@ -30,6 +34,14 @@ export function makeQueryTester() {
                 value text NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS users (
+                "id" text NOT NULL PRIMARY KEY,
+                "first_name" text NOT NULL,
+                "last_name" text NOT NULL,
+                "email" text NOT NULL,
+                "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
             INSERT INTO test_table_bar
                 (id, uid, value, date)
             VALUES
@@ -42,12 +54,26 @@ export function makeQueryTester() {
                 (7, 't', 'ddd', '2022-07-01'),
                 (8, 's', 'ddd', '2022-08-01'),
                 (9, 'r', 'eee', '2022-09-01');
+
+            INSERT INTO users
+                (id, "first_name", "last_name", email)
+            VALUES
+                ('z', 'Haskell', 'Nguyen', 'haskell04@gmail.com'),
+                ('y', 'Padberg', 'Fletcher', 'padberg.shawna@hotmail.com'),
+                ('x', 'Neal', 'Phillips', 'nvandervort@collier.com'),
+                ('w', 'Nolan', 'Muller', 'qnolan@yahoo.com'),
+                ('v', 'Bob', 'Dean', 'acummerata@gmail.com'),
+                ('u', 'Rebecca', 'Mercer', 'moore.rebeca@yahoo.com'),
+                ('t', 'Katheryn', 'Ritter', 'katheryn89@hotmail.com'),
+                ('s', 'Dulce', 'Espinoza', 'dulce23@gmail.com'),
+                ('r', 'Paucek', 'Clayton', 'paucek.deangelo@hotmail.com');
         `);
     });
 
     afterAll(async () => {
         await (await pool).query(sql.unsafe`
             DROP TABLE IF EXISTS test_table_bar;
+            DROP TABLE IF EXISTS users;
         `);
 
         await (await pool).end();
