@@ -1,5 +1,4 @@
-import { z, ZodError } from 'zod';
-import { SchemaValidationError } from 'slonik';
+import { z } from 'zod';
 
 export function notEmpty<TValue>(value: TValue | null | undefined | void): value is TValue {
     return value !== null && value !== undefined;

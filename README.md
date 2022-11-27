@@ -179,9 +179,15 @@ Refer to the [playground file](./src/core/__tests__/playground.test.ts) for more
 
 ## Installation
 
+### Requirements
+
+TypeScript 4.5+
+Slonik 33+
+
 ```bash
 yarn add slonik-trpc
 ```
+
 ## Known issues
 
 If you're passing a select/exclude array conditionally, typescript type inference doesn't allow getting the underlying type correctly. You'll have to use type assertions in that case, use `as any` if one condition has an empty array/undefined to get all the fields returned properly. Otherwise typescript will only return id/name.

@@ -185,6 +185,7 @@ export function makeQueryLoader<
                         options?.virtualFields?.[key]?.resolve) {
                         return [key, options?.virtualFields?.[key]?.resolve] as const;
                     }
+                    return null;
                 })
                 .filter(notEmpty);
             transformer.forEach(([key, transformer]) => {
