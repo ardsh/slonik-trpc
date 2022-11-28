@@ -35,7 +35,7 @@ export const dateFilterType = z
     .partial();
 
 export const booleanFilter = (
-    bool: boolean | undefined,
+    bool: boolean | undefined | null,
     trueStatement: Fragment,
     // If null, doesn't add anything on a false condition
     falseStatement?: Fragment | null
@@ -49,20 +49,9 @@ export const booleanFilter = (
 };
 
 export const dateFilter = (
-    date: z.infer<typeof dateFilterType> | undefined,
+    date: z.infer<typeof dateFilterType> | undefined | null,
     field: Fragment
 ) => {
-    if (Array.isArray(date)) {
-        date = {
-            _gt: date[0],
-            _lt: date[1] || undefined,
-        };
-    }
-    if (typeof date === 'string') {
-        date = {
-            _gt: date,
-        };
-    }
     const conditions = [] as Fragment[];
     if (date?._gt) {
         conditions.push(sql.fragment`${field} > ${date._gt}`);
@@ -77,7 +66,7 @@ export const dateFilter = (
 };
 
 export const arrayFilter = (
-    filter: string[] | number[] | string | number | undefined,
+    filter: string[] | number[] | string | number | undefined | null,
     field: Fragment,
     type = 'text'
 ) => {

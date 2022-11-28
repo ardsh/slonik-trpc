@@ -218,6 +218,11 @@ const query = sql.type(z.object({
 
 Contributions, issues and feature requests are welcome!<br />Feel free to check [issues page](issues).
 
+### Ideas
+
+- Prisma generator similar to [zod-prisma](https://github.com/CarterGrimmeisen/zod-prisma) that automatically creates data loaders from prisma schemas.
+- Automatically syncing the zod types with sql, using something like [@slonik/typegen](https://github.com/mmkal/slonik-tools/tree/main/packages/typegen)
+
 ## 📝 License
 
 Copyright © 2022 [ardsh](https://github.com/ardsh).<br />

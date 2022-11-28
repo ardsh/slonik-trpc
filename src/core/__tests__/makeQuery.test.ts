@@ -143,9 +143,6 @@ describe("withQueryLoader", () => {
     });
 
     it("Allows returning promises from virtual fields", async () => {
-        const resolve = jest.fn(async (row) => {
-            return Promise.resolve(row.id);
-        });
         const loader = makeQueryLoader({
             db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
@@ -172,9 +169,6 @@ describe("withQueryLoader", () => {
     });
 
     it("Supports multiple (mixed) virtual fields", async () => {
-        const resolve = jest.fn(async (row) => {
-            return Promise.resolve(row.id);
-        });
         const loader = makeQueryLoader({
             db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
@@ -279,7 +273,7 @@ describe("withQueryLoader", () => {
             type: zodType,
             virtualFields: {
                 ids: {
-                    async resolve(row) {
+                    async resolve() {
                         return Promise.reject('Error fetching!');
                     },
                     dependencies: [],
@@ -298,7 +292,9 @@ describe("withQueryLoader", () => {
         const loader = makeQueryLoader({
             db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
-            sortableColumns: ["value"]
+            sortableColumns: {
+                value: ["test_table_bar", "value"],
+            },
         });
         expect(() => loader.getQuery({
             // @ts-expect-error id is not sortable
@@ -309,11 +305,33 @@ describe("withQueryLoader", () => {
         }).sql).toContain(`"value" DESC NULLS LAST`)
     });
 
+    it("Allows ordering by multiple columns", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                value: ["test_table_bar", "value"],
+                id: "id",
+            },
+        });
+        expect(loader.getQuery({
+            orderBy: [["id", "ASC"], ["value", "DESC NULLS LAST"]],
+        }).sql).toContain(`"id" ASC, "test_table_bar"."value" DESC NULLS LAST`);
+        expect(loader.getQuery({
+            orderBy: ["value", "DESC NULLS LAST"],
+        }).sql).toContain(`"value" DESC NULLS LAST`)
+        expect(await loader.load({
+            orderBy: [["value", "DESC NULLS LAST"], ["id", "ASC"]],
+        })).toMatchSnapshot();
+    });
+
     it("Allows sorting by non-selectable columns", async () => {
         const loader = makeQueryLoader({
             db,
             query: sql.type(zodType)`SELECT id, uid, value FROM test_table_bar`,
-            sortableColumns: ["date"],
+            sortableColumns: {
+                date: "date"
+            },
         });
         expect(() => loader.getQuery({
             // @ts-expect-error value is not sortable
@@ -331,7 +349,9 @@ describe("withQueryLoader", () => {
         const loader = makeQueryLoader({
             db,
             query: sql.type(zodType)`SELECT id, uid FROM test_table_bar`,
-            sortableColumns: ["date"],
+            sortableColumns: {
+                date: "date"
+            },
         });
         expect(() => loader.getQuery({
             // @ts-expect-error blabla is not a valid sort direction
@@ -360,7 +380,7 @@ describe("withQueryLoader", () => {
                 largeIds: true,
             }
         });
-        
+        expect(query.sql).toContain('"id" > 5');
         const result = await loader.load({
             select: ['value', 'id'],
             limit: 1,
@@ -446,7 +466,9 @@ describe("withQueryLoader", () => {
             ...genericOptions,
             required: ["id"],
             defaultExcludedColumns: ["id", "dummyField"],
-            sortableColumns: ["id"]
+            sortableColumns: {
+                id: "id"
+            },
         });
         const result = await loader.load({
             select: ["value"],
@@ -498,7 +520,6 @@ describe("withQueryLoader", () => {
     });
     const getConditions = makeFilter(filterOptions.interpreters, filterOptions.options);
     type Filter = Parameters<typeof getConditions>[0];
-    const filters = [] as [string, Filter][];
 
     const testFilters = (filter: Filter) => {
         const loader = makeQueryLoader({
@@ -570,7 +591,9 @@ describe("withQueryLoader", () => {
     it("Doesn't return total count if unspecified", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
-            sortableColumns: ["value"]
+            sortableColumns: {
+                value: ["test_table_bar", "value"],
+            }
         });
         const query = await loader.loadOffsetPagination({
             select: ['value'],
@@ -604,11 +627,13 @@ describe("withQueryLoader", () => {
     it("Returns minimal count as skip + edges.length + 1 normally", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
-            sortableColumns: ["uid"],
+            sortableColumns: {
+                userid: "uid",
+            },
         });
         const query = await loader.loadOffsetPagination({
             select: ['value'],
-            orderBy: ["uid", "DESC"],
+            orderBy: ["userid", "DESC"],
             limit: 5
         });
         expect(query.minimumCount).toEqual(query.edges.length + 1);

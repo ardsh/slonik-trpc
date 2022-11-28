@@ -88,6 +88,11 @@ type Filters<T extends Record<string, z.ZodType>, TContext> = {
 type UnionToIntersection<U> = 
   (U extends any ? (k: U)=>void : never) extends ((k: infer I)=>void) ? I : never
 
+/**
+ * Merges two or more filter declarations to allow easy composability.
+ * If options is specified, it overwrites the pre and post-processing, and the original functions are NOT called.
+ * Otherwise the original postprocessing and preprocessing of filters is kept, and the functions are called sequentially.
+*/
 export const mergeFilters = <TFilter extends Filters<any, TContext>, TContext=any>(filters: readonly TFilter[], options?: FilterOptions<TFilter["filters"], TContext>) => {
     return {
         filters: filters.reduce((acc, filter) => {
@@ -102,7 +107,18 @@ export const mergeFilters = <TFilter extends Filters<any, TContext>, TContext=an
                 ...filter.interpreters,
             }
         }, {}),
-        options,
+        options: options ? options : {
+            postprocess(conditions: SqlFragment[], allFilters: TFilter["filters"], context: TContext) {
+                return filters.reduce((acc: SqlFragment[], filter: any) => {
+                    return filter.options?.postprocess?.(acc, allFilters, context) || acc;
+                }, conditions);
+            },
+            preprocess(allFilters: TFilter["filters"], context: TContext) {
+                return filters.reduce((acc: TFilter["filters"], filter: any) => {
+                    return filter.options?.preprocess?.(acc, context) || acc;
+                }, allFilters);
+            }
+        },
     } as UnionToIntersection<TFilter>;
 }
 

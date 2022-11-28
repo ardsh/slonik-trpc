@@ -7,7 +7,7 @@ import { makeQueryLoader } from '../makeQueryLoader';
 
 import { createFilters, arrayStringFilterType, arrayFilter, booleanFilter, dateFilterType, dateFilter } from '../../utils';
 
-const db = makeQueryTester().db;
+const db = makeQueryTester('playground').db;
 
 test("playground", async () => {
 expect(3).toEqual(3);
@@ -41,7 +41,10 @@ expectTypeOf(excludedOnly[0]).toEqualTypeOf<{ email: string, created_at: number 
 
 const sortableLoader = makeQueryLoader({
     query,
-    sortableColumns: ["first_name", "created_at"],
+    sortableColumns: {
+        first_name: "first_name",
+        created_at: "created_at",
+    },
 });
 
 

@@ -8,7 +8,7 @@ function getPostgresUrl(): string {
     }:${process.env.PGPORT || '5432'}/${process.env.PGDATABASE || 'postgres'}`;
 }
 
-export function makeQueryTester() {
+export function makeQueryTester(namespace?: string) {
     const pool = createPool(getPostgresUrl(), {
         interceptors: [
             createQueryLoggingInterceptor(),
@@ -26,6 +26,12 @@ export function makeQueryTester() {
     });
 
     beforeAll(async () => {
+        if (namespace) {
+            await (await pool).query(sql.unsafe`
+                CREATE SCHEMA IF NOT EXISTS ${sql.identifier([namespace])};
+                SET search_path TO ${sql.identifier([namespace])};
+            `);
+        }
         await (await pool).query(sql.unsafe`
             CREATE TABLE IF NOT EXISTS test_table_bar (
                 id integer NOT NULL PRIMARY KEY,
@@ -75,6 +81,11 @@ export function makeQueryTester() {
             DROP TABLE IF EXISTS test_table_bar;
             DROP TABLE IF EXISTS users;
         `);
+        if (namespace) {
+            await (await pool).query(sql.unsafe`
+                DROP SCHEMA IF EXISTS ${sql.identifier([namespace])} CASCADE;
+            `);
+        }
 
         await (await pool).end();
     });

@@ -15,6 +15,11 @@ const filtersOptions = createFilters()({
     // If true is specified, id must be greater than 5
     largeIds: (filter) => booleanFilter(filter, sql.fragment`"id" > 5`),
     uid: (uids) => arrayFilter(uids, sql.fragment`"uid"`),
+}, {
+    postprocess(conditions) {
+        conditions.push(sql.fragment`uid = 'x'`)
+        return conditions;
+    }
 });
 const getConditions = makeFilter(filtersOptions.interpreters, filtersOptions.options);
 
@@ -72,6 +77,13 @@ const otherFilters = createFilters()({
 }, {
     isCheap: (filter) => booleanFilter(filter, sql.fragment`"value" ILIKE '%cheap%'`),
     isBeforeNow: (filter) => booleanFilter(filter, sql.fragment`"date" < NOW()`),
+}, {
+    preprocess(filters) {
+        if (filters) {
+            filters.isCheap = true;
+        }
+        return filters;
+    }
 });
 
 const anotherFilters = createFilters()({
@@ -80,6 +92,11 @@ const anotherFilters = createFilters()({
 }, {
     randomNumber: (text) => sql.fragment`"id" = ${sql.array(text as number[], 'numeric')}`,
     valueFilter: (value) => arrayFilter(value, sql.fragment`"value"`),
+}, {
+    postprocess(conditions) {
+        conditions.push(sql.fragment`uid = 'anotherFilter'`);
+        return conditions;
+    }
 });
 
 const combinedFilter = mergeFilters([filtersOptions, otherFilters, anotherFilters]);
@@ -89,7 +106,7 @@ const combinedFilter = mergeFilters([filtersOptions, otherFilters, anotherFilter
 //     filters: combinedFilter,
 // });
 
-const getCombinedConditions = makeFilter(createFilters()(combinedFilter.filters, combinedFilter.interpreters).interpreters);
+const getCombinedConditions = makeFilter(createFilters()(combinedFilter.filters, combinedFilter.interpreters, combinedFilter.options).interpreters, combinedFilter.options);
 
 type CombinedFilter = Parameters<typeof getCombinedConditions>[0];
 const combined = filters.slice() as [string, CombinedFilter][];

@@ -5,7 +5,7 @@ import { RemoveAny } from '../helpers/types';
 import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, recursiveFilterConditions, ZodPartial } from "./queryFilter";
 
 const orderDirection = z.enum(["ASC", "DESC", "ASC NULLS LAST", "DESC NULLS LAST"]);
-type OrderField = [string, z.infer<typeof orderDirection>];
+type OrderField = [string | [string, string] | [string, string, string], z.infer<typeof orderDirection>];
 
 function getOrderByDirection(field: OrderField) {
     switch (field[1]) {
@@ -17,8 +17,10 @@ function getOrderByDirection(field: OrderField) {
 }
 
 function interpretOrderBy(field: OrderField) {
-    return sql.fragment`ORDER BY ${sql.identifier([field[0]])} ${getOrderByDirection(field)}`;
+    return sql.fragment`${sql.identifier(Array.isArray(field[0]) ? field[0] : [field[0]])} ${getOrderByDirection(field)}`;
 }
+
+type OptionalArray<T> = Array<T> | T;
 
 type LoadParameters<
     TFilter,
@@ -36,7 +38,7 @@ type LoadParameters<
     limit?: number;
     /** Specify the count of items to skip, usually (currentPage - 1) * limit */
     skip?: number;
-    orderBy?: [TSortable] extends [never] ? never : [TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST'] | null;
+    orderBy?: [TSortable] extends [never] ? never : OptionalArray<[TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
     context?: TContext;
     where?: RecursiveFilterConditions<TFilter>;
 };
@@ -103,13 +105,28 @@ export function makeQueryLoader<
     type?: TObject,
     contextParser?: TContextZod,
     db?: Pick<CommonQueryMethods, "any">
-    /** If you specify custom filters, make sure the fields they reference are accessible from the main query*/
+    /**
+     * You can use the {@link createFilters} helper for this argument.
+     * Make sure the fields they reference are accessible from the main query
+     * */
     filters?: {
         filters: TFilterTypes,
         interpreters: Interpretors<TFilterTypes, z.infer<TContextZod>>,
         options?: FilterOptions<TFilterTypes, z.infer<TContextZod>>
     }
-    sortableColumns?: readonly [TSortable, ...TSortable[]];
+    /**
+     * Specify aliases for sortable columns. Can either be a single column, or a tuple of table name + column.
+     * E.g.
+     * ```ts
+     * {
+     *     createdDate: ["users", "created_at"],
+     *     name: "fullName",
+     * }
+     * ```
+    */
+    sortableColumns?: {
+        [key in TSortable]: string | [string, string] | [string, string, string]
+    };
     selectableColumns?: readonly [TSelectable, ...TSelectable[]];
     defaultExcludedColumns?: readonly [TDefaultExcluded, ...TDefaultExcluded[]];
     /**
@@ -136,8 +153,9 @@ export function makeQueryLoader<
     type TFilter = z.infer<ZodPartial<TFilterTypes>>;
     const interpretFilters = options?.filters?.interpreters ? makeFilter<TFilterTypes, z.infer<TContextZod>>(options.filters.interpreters, options.filters?.options) : null;
     const dataTransformers = [] as ((data: any) => any)[];
-    const sortFields = options?.sortableColumns?.length
-            ? z.enum(options.sortableColumns)
+    const sortableAliases = Object.keys(options?.sortableColumns || {}) as [TSortable, ...TSortable[]];
+    const sortFields = sortableAliases.length
+            ? z.enum(sortableAliases).transform(field => options.sortableColumns?.[field] || field)
             : // If unspecified, no field is allowed to be used for sorting
             (z.never() as never);
     const orderByType = z.tuple([sortFields, orderDirection]);
@@ -197,11 +215,12 @@ export function makeQueryLoader<
                 }
             })
         }
-        const parsedOrderBy = orderBy?.length ? orderByType.parse(orderBy) : null;
+        const orderExpressions = Array.isArray(orderBy?.[0]) ? orderBy?.map(order => orderByType.parse(order)) :
+            orderBy?.length ? [orderByType.parse(orderBy)] : null;
         // TODO: Wrap the base query to allow all kinds of queries
         const baseQuery = sql.type(zodType)`${query}
         ${whereCondition ? sql.fragment`WHERE ${whereCondition}` : sql.fragment``}
-        ${parsedOrderBy ? interpretOrderBy(parsedOrderBy) : sql.fragment``}
+        ${orderExpressions ? sql.fragment`ORDER BY ${sql.join(orderExpressions.map(parsed => interpretOrderBy(parsed)), sql.fragment`, `)}` : sql.fragment``}
         ${typeof limit === 'number' ? sql.fragment`LIMIT ${limit}` : sql.fragment``}
         ${typeof skip === 'number' ? sql.fragment`OFFSET ${skip}` : sql.fragment``}
         `;
