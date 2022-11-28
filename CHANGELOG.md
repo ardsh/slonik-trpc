@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.2.4
+
+### Patch Changes
+
+-   9798512: Added support for sorting by multiple columns.
+
 ## 0.2.2
 
 ### Patch Changes
