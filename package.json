@@ -58,7 +58,7 @@
         "slonik": "^33.0.3",
         "slonik-interceptor-query-logging": "^1.4.7",
         "ts-jest": "^29.0.1",
-        "typescript": "4.5.5",
+        "typescript": "4.9.3",
         "zod": "^3.19.1"
     },
     "files": [
