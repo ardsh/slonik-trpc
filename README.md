@@ -52,14 +52,14 @@ To use it in trpc declare a query and pass the input.
 ```ts
 input: loader.getLoadArgs(),
 async resolve({ ctx, input }) {
-    return loader.loadOffsetPagination({
+    return loader.loadPagination({
         ...input,
         context: ctx,
     });
 }
 ```
 
-You don't have to use loadOffsetPagination/load if you're using `getQuery`, and can execute the query yourself. The returned query data will still be type-safe.
+You don't have to use loadPagination/load if you're using `getQuery`, and can execute the query yourself. The returned query data will still be type-safe.
 
 ```ts
 async resolve({ ctx, input }) {
@@ -144,7 +144,7 @@ const filters = createFilters<Context>()({
 
 ### Virtual fields
 
-Virtual fields are only supported when using `load`/`loadOffsetPagination` currently.
+Virtual fields are only supported when using `load`/`loadPagination` currently.
 
 ```ts
 const virtualFieldsLoader = makeQueryLoader({
@@ -175,7 +175,7 @@ Refer to the [playground file](./src/core/__tests__/playground.test.ts) for more
 - [x] Virtual fields (fully type-safe).
 - [x] Post-processing with javascript functions.
 - [x] Offset-based pagination.
-- [ ] Cursor-based pagination (TODO).
+- [x] Cursor-based pagination.
 
 ## Installation
 

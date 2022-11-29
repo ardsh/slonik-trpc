@@ -185,7 +185,7 @@ describe("withQueryLoader", () => {
                 }
             }
         });
-        const query = await loader.loadOffsetPagination({
+        const query = await loader.loadPagination({
             take: 1,
             select: ['ids', 'field'],
         });
@@ -212,7 +212,7 @@ describe("withQueryLoader", () => {
                 }
             }
         });
-        const query = await loader.loadOffsetPagination({
+        const query = await loader.loadPagination({
             select: ['value'],
             skip: 1,
             take: 1
@@ -616,7 +616,7 @@ describe("withQueryLoader", () => {
                 value: ["test_table_bar", "value"],
             }
         });
-        const query = await loader.loadOffsetPagination({
+        const query = await loader.loadPagination({
             select: ['value'],
             orderBy: ["value", "ASC"],
             take: 5
@@ -635,7 +635,7 @@ describe("withQueryLoader", () => {
             ...genericOptions,
         });
         const take = 5;
-        const query = await loader.loadOffsetPagination({
+        const query = await loader.loadPagination({
             select: ['value'],
             takeCount: true,
             take
@@ -652,7 +652,7 @@ describe("withQueryLoader", () => {
                 userid: "uid",
             },
         });
-        const query = await loader.loadOffsetPagination({
+        const query = await loader.loadPagination({
             select: ['value'],
             orderBy: ["userid", "DESC"],
             take: 5
@@ -670,7 +670,7 @@ describe("withQueryLoader", () => {
         });
         const take = 3;
         const takeNextPages = 2;
-        const query = await loader.loadOffsetPagination({
+        const query = await loader.loadPagination({
             select: ['value'],
             take,
             takeNextPages,
@@ -680,7 +680,6 @@ describe("withQueryLoader", () => {
         expect(query.edges[1].value).toEqual(expect.any(String));
         expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string, postprocessedField: boolean, id: number }>();
         expect(query.hasNextPage).toEqual(true);
-        expect(query.hasPreviousPage).toEqual(false);
     });
 
     // getLoadArgs
@@ -1032,4 +1031,190 @@ describe("withQueryLoader", () => {
         expect(data).toEqual([{ id: expect.any(Number) }]);
     });
 
+    it("Loads by cursor-based pagination when sorted by a single column", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+            }
+        });
+        const data = await loader.load({
+            select: ['id'],
+            searchAfter: {
+                id: 5
+            },
+            take: 1,
+            orderBy: ["id", "ASC"]
+        });
+        expect(data).toEqual([{
+            id: 6,
+        }]);
+    });
+
+    it("Loads by cursor-based pagination with multiple columns", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                value: sql.fragment`"value"`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            searchAfter: {
+                id: 2,
+                value: "aaa",
+            },
+            take: 1,
+            orderBy: [["value", "DESC"], ["id", "DESC"]] as const
+        };
+        const data = await loader.loadPagination(args);
+        const query = loader.getQuery(args);
+        expect(data).toEqual({
+            edges: [{
+                id: 1,
+                value: "aaa",
+            }],
+            hasNextPage: false,
+            minimumCount: 1,
+            count: null,
+        });
+        expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "id" < $3)`)
+        expect(query.sql).toContain(`ORDER BY "value" DESC, "id" DESC`)
+    });
+
+    it("Loads cursor-based even when sorted by complex expression column", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                upperValue: sql.fragment`UPPER("value")`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            searchAfter: {
+                id: 2,
+                upperValue: "AAA",
+            },
+            take: 1,
+            orderBy: [["upperValue", "DESC"], ["id", "DESC"]] as const
+        };
+        const query = loader.getQuery(args);
+        expect(query.sql).toContain(`(UPPER("value") < $1) OR (UPPER("value") = $2 AND "id" < $3)`)
+        expect(query.sql).toContain(`ORDER BY UPPER("value") DESC, "id" DESC`)
+        const data = await loader.loadPagination(args);
+        expect(data).toEqual({
+            edges: [{
+                id: 1,
+                value: "aaa",
+            }],
+            hasNextPage: false,
+            minimumCount: 1,
+            count: null,
+        });
+    });
+
+    it("Reverses the order when take parameter is negative", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                upperValue: sql.fragment`UPPER("value")`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            searchAfter: {
+                id: 2,
+                upperValue: "AAA",
+            },
+            take: -2,
+            orderBy: [["upperValue", "DESC"], ["id", "DESC"]] as const
+        };
+        const query = loader.getQuery(args);
+        expect(query.sql).toContain(`(UPPER("value") > $1) OR (UPPER("value") = $2 AND "id" > $3)`)
+        expect(query.sql).toContain(`ORDER BY UPPER("value") ASC, "id" ASC`)
+        const data = await loader.loadPagination(args);
+        expect(data).toEqual({
+            edges: [{
+                id: 3,
+                value: "bbb",
+            }, {
+                id: 4,
+                value: "bbb"
+            }],
+            hasNextPage: true,
+            minimumCount: 3,
+            count: null,
+        });
+    });
+
+    it("Cursor-based pagination doesn't work properly if searchAfter values aren't specified (NOT A BUG) (UNSPECIFIED BEHAVIOR, MAY CHANGE)", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                value: sql.fragment`"value"`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            searchAfter: {
+                id: 2,
+            },
+            take: 1,
+            orderBy: [["id", "ASC"], ["value", "ASC"]] as const
+        };
+        const data = await loader.loadPagination(args as any);
+        const query = loader.getQuery(args as any);
+        expect(data).toEqual({
+            edges: [{
+                id: 3,
+                value: "bbb"
+            }],
+            hasNextPage: true,
+            minimumCount: 2,
+            count: null,
+        });
+        expect(query.sql).toContain(`("id" > $1) OR ("id" = $2 AND "value" IS NULL)`)
+        expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
+    });
+
+    it("Cursor-based pagination doesn't work properly if searchAfter values aren't specified for primary column (NOT A BUG) (UNSPECIFIED BEHAVIOR, MAY CHANGE)", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                value: sql.fragment`"value"`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            searchAfter: {
+                value: "bbb",
+            },
+            take: 1,
+            orderBy: [["id", "ASC"], ["value", "ASC"]] as const
+        };
+        const query = loader.getQuery(args as any);
+        expect(query.sql).toContain(`("id" IS NULL) OR (TRUE AND "value" > $1)`)
+        expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
+        const data = await loader.loadPagination(args as any);
+        expect(data).toEqual({
+            edges: [{
+                id: 5,
+                value: "ccc"
+            }],
+            hasNextPage: true,
+            minimumCount: 2,
+            count: null,
+        });
+    });
 });
