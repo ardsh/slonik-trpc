@@ -42,8 +42,8 @@
     },
     "homepage": "https://github.com/ardsh/slonik-trpc#readme",
     "peerDependencies": {
-        "slonik": ">= 33",
-        "zod": ">= 3"
+        "slonik": ">=33",
+        "zod": ">=3"
     },
     "devDependencies": {
         "@changesets/cli": "^2.25.2",

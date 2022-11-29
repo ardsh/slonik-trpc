@@ -1,23 +1,30 @@
-import { sql, CommonQueryMethods, QuerySqlToken, SqlFragment } from "slonik";
+import { sql, CommonQueryMethods, QuerySqlToken, SqlFragment, FragmentSqlToken } from "slonik";
 import { z } from 'zod';
 import { notEmpty } from "../helpers/zod";
 import { RemoveAny } from '../helpers/types';
 import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, recursiveFilterConditions, ZodPartial } from "./queryFilter";
 
-const orderDirection = z.enum(["ASC", "DESC", "ASC NULLS LAST", "DESC NULLS LAST"]);
-type OrderField = [string | [string, string] | [string, string, string], z.infer<typeof orderDirection>];
+const orderDirection = z.enum(["ASC", "DESC"]);
+type OrderDirection = z.infer<typeof orderDirection>;
+type OrderField = [string | [string, string] | [string, string, string] | FragmentSqlToken, z.infer<typeof orderDirection>];
 
 function getOrderByDirection(field: OrderField) {
     switch (field[1]) {
     case 'ASC': return sql.fragment`ASC`;
-    case 'ASC NULLS LAST': return sql.fragment`ASC NULLS LAST`;
+    // case 'ASC NULLS LAST': return sql.fragment`ASC NULLS LAST`;
     case 'DESC': return sql.fragment`DESC`;
-    case 'DESC NULLS LAST': return sql.fragment`DESC NULLS LAST`;
+    // case 'DESC NULLS LAST': return sql.fragment`DESC NULLS LAST`;
     }
 }
 
+function interpretFieldFragment(field: string | [string, string] | [string, string, string] | FragmentSqlToken): FragmentSqlToken {
+    if (typeof field === 'string' || Array.isArray(field)) {
+        return sql.fragment`${sql.identifier(Array.isArray(field) ? field : [field])}`;
+    }
+    return field;
+}
 function interpretOrderBy(field: OrderField) {
-    return sql.fragment`${sql.identifier(Array.isArray(field[0]) ? field[0] : [field[0]])} ${getOrderByDirection(field)}`;
+    return sql.fragment`${interpretFieldFragment(field[0])} ${getOrderByDirection(field)}`;
 }
 
 type OptionalArray<T> = Array<T> | T;
@@ -35,8 +42,8 @@ type LoadParameters<
     /** The fields that should be excluded. Takes precedence over `select`. */
     exclude?: readonly TExclude[];
     /** The amount of rows to query */
-    limit?: number;
-    /** Specify the count of items to skip, usually (currentPage - 1) * limit */
+    take?: number;
+    /** Specify the count of items to skip, usually (currentPage - 1) * take */
     skip?: number;
     orderBy?: [TSortable] extends [never] ? never : OptionalArray<[TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
     context?: TContext;
@@ -125,7 +132,7 @@ export function makeQueryLoader<
      * ```
     */
     sortableColumns?: {
-        [key in TSortable]: string | [string, string] | [string, string, string]
+        [key in TSortable]: string | [string, string] | [string, string, string] | FragmentSqlToken
     };
     selectableColumns?: readonly [TSelectable, ...TSelectable[]];
     defaultExcludedColumns?: readonly [TDefaultExcluded, ...TDefaultExcluded[]];
@@ -164,7 +171,7 @@ export function makeQueryLoader<
         TExclude extends keyof (TVirtuals & z.infer<TObject>) = never,//TDefaultExcluded[number], Shouldn't exclude defaults
     >({
         where,
-        limit,
+        take,
         skip,
         orderBy,
         context,
@@ -221,7 +228,7 @@ export function makeQueryLoader<
         const baseQuery = sql.type(zodType)`${query}
         ${whereCondition ? sql.fragment`WHERE ${whereCondition}` : sql.fragment``}
         ${orderExpressions ? sql.fragment`ORDER BY ${sql.join(orderExpressions.map(parsed => interpretOrderBy(parsed)), sql.fragment`, `)}` : sql.fragment``}
-        ${typeof limit === 'number' ? sql.fragment`LIMIT ${limit}` : sql.fragment``}
+        ${typeof take === 'number' ? sql.fragment`LIMIT ${take}` : sql.fragment``}
         ${typeof skip === 'number' ? sql.fragment`OFFSET ${skip}` : sql.fragment``}
         `;
         const requiredFields = options?.required || ([] as string[]);
@@ -276,25 +283,33 @@ export function makeQueryLoader<
 
     const getLoadArgs = <
         TFields extends string = TSelectable,
-        TSort extends string = TSortable,
+        TSort extends TSortable = TSortable,
     >(
         {
-            sortableColumns = options?.sortableColumns as never,
+            sortableColumns = Object.keys(options?.sortableColumns || {}) as never,
             selectableColumns = options?.selectableColumns as never,
+            transformSortColumns,
         }: {
+            /** You can remove specific sortable columns to disallow sorting by them */
             sortableColumns?: [TSort, ...TSort[]];
             selectableColumns?: [TFields, ...TFields[]];
+            transformSortColumns?: (columns?: Array<[TSort, OrderDirection]> | null) => Array<[TSort, OrderDirection]> | null | undefined
         } = {} as never
     ) => {
         const sortFields = sortableColumns?.length
             ? z.enum(sortableColumns)
             : // If unspecified, no field is allowed to be used for sorting
             (z.never() as never);
+        const orderTuple = z.tuple([sortFields, orderDirection]);
         const selectColumns = (selectableColumns || options.selectableColumns);
         const fields = selectColumns?.length
             ? z.enum(selectColumns)
             : // If unspecified, any field is allowed to be selected
             (z.string() as never)
+        const orderBy = z.preprocess(
+            (a) => (Array.isArray(a) && Array.isArray(a[0]) ? a : [a].filter(notEmpty)),
+            z.union([z.array(orderTuple), orderTuple]).optional()
+        );
         type ActualFilters = RecursiveFilterConditions<
             z.infer<ZodPartial<TFilterTypes>>>;
         return z.object({
@@ -302,14 +317,20 @@ export function makeQueryLoader<
             select: z.array(fields).optional(),
             /** The fields that should be excluded. Takes precedence over `select`. */
             exclude: z.array(fields).optional(),
-            limit: z.number().optional(),
+            take: z.number().optional(),
             skip: z.number().optional().default(0),
             takeCount: z.boolean().optional(),
             takeNextPages: z.number().optional(),
-            orderBy: z
-                .tuple([sortFields, z.enum(['ASC', 'DESC', 'ASC NULLS LAST', 'DESC NULLS LAST'])])
-                .optional()
-                .nullable(),
+            orderBy: typeof transformSortColumns === 'function' ? orderBy.transform(columns => {
+                if (Array.isArray(columns)) {
+                    if (Array.isArray(columns[0])) {
+                        return transformSortColumns(columns as any) || columns
+                    } else {
+                        return transformSortColumns([columns] as any) || columns;
+                    }
+                }
+                return columns;
+            }) : orderBy,
             where: options?.filters?.filters ? recursiveFilterConditions(options?.filters?.filters).nullish() as unknown as z.ZodType<ActualFilters> : z.any() as never,
         }).partial();
     };
@@ -364,18 +385,18 @@ export function makeQueryLoader<
         ) {
             const db = database || options?.db;
             if (!db?.any) throw new Error("Database not provided");
-            const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (args?.limit || 25) + 1;
+            const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (args?.take || 25) + 1;
             const finalQuery = getQuery({
                 ...args,
-                limit:
-                    typeof args.limit === 'number'
+                take:
+                    typeof args.take === 'number'
                         ? // Query an extra row to see if the next page exists
-                          Math.min(Math.max(0, args.limit), 1000) + extraItems
+                          Math.min(Math.max(0, args.take), 1000) + extraItems
                         : undefined,
             });
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
                 ...args,
-                limit: undefined,
+                take: undefined,
             })}) allrows`;
             // Count is null by default
             let countPromise = Promise.resolve(null as number | null);
@@ -387,7 +408,7 @@ export function makeQueryLoader<
             return db
                 .any(finalQuery)
                 .then(async (edges) => {
-                    const slicedEdges = edges.slice(0, args.limit || undefined);
+                    const slicedEdges = edges.slice(0, args.take || undefined);
                     return {
                         edges: (dataTransformers.length ? await resolveTransformers(dataTransformers, slicedEdges) : slicedEdges),
                         hasNextPage: edges.length > slicedEdges.length,

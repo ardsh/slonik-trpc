@@ -91,7 +91,7 @@ describe("withQueryLoader", () => {
         });
         const query = await loader.load({
             select: ['value', 'ids'],
-            limit: 1
+            take: 1
         });
         expect(query[0]?.ids).toEqual(expect.any(String));
         expect(loader.getSelectableFields()).toContain("ids");
@@ -112,7 +112,7 @@ describe("withQueryLoader", () => {
             }
         });
         const query = await loader.load({
-            limit: 1
+            take: 1
         });
         expect(query[0]?.ids).toEqual(expect.any(String));
         expect(loader.getSelectableFields()).toContain("ids");
@@ -132,7 +132,7 @@ describe("withQueryLoader", () => {
             }
         });
         const query = await loader.load({
-            limit: 1,
+            take: 1,
             select: ["id", "uid"]
         });
         // @ts-expect-error ids is not selected
@@ -156,7 +156,7 @@ describe("withQueryLoader", () => {
             }
         });
         const query = await loader.load({
-            limit: 1,
+            take: 1,
             select: ['ids'],
         });
         expect(query[0]).toEqual(expect.objectContaining({
@@ -186,7 +186,7 @@ describe("withQueryLoader", () => {
             }
         });
         const query = await loader.loadOffsetPagination({
-            limit: 1,
+            take: 1,
             select: ['ids', 'field'],
         });
         expect(query.edges[0]).toEqual(expect.objectContaining({
@@ -214,7 +214,8 @@ describe("withQueryLoader", () => {
         });
         const query = await loader.loadOffsetPagination({
             select: ['value'],
-            limit: 1
+            skip: 1,
+            take: 1
         });
         expect(query.edges[0]?.someOtherField).toEqual('blabla');
         expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string, someOtherField: string }>();
@@ -237,7 +238,7 @@ describe("withQueryLoader", () => {
         });
         const query = await loader.load({
             select: ['value'],
-            limit: 1
+            take: 1
         });
         expect(query[0]?.someOtherField).toEqual('blabla');
         expectTypeOf(query[0]).toEqualTypeOf<{ value: string, someOtherField: string }>();
@@ -262,7 +263,7 @@ describe("withQueryLoader", () => {
         // eslint-disable-next-line jest/valid-expect
         expect(loader.load({
             select: ['value'],
-            limit: 1
+            take: 1
         })).rejects.toEqual("Error fetching!");
     });
 
@@ -284,7 +285,7 @@ describe("withQueryLoader", () => {
         // eslint-disable-next-line jest/valid-expect
         expect(loader.load({
             select: ['value', 'ids'],
-            limit: 1
+            take: 1
         })).rejects.toEqual("Error fetching!");
     });
 
@@ -298,11 +299,11 @@ describe("withQueryLoader", () => {
         });
         expect(() => loader.getQuery({
             // @ts-expect-error id is not sortable
-            orderBy: ["id", "ASC"]
+            orderBy: ["id", "ASC"],
         })).toThrow();
         expect(loader.getQuery({
-            orderBy: ["value", "DESC NULLS LAST"],
-        }).sql).toContain(`"value" DESC NULLS LAST`)
+            orderBy: ["value", "DESC"],
+        }).sql).toContain(`"value" DESC`)
     });
 
     it("Allows ordering by multiple columns", async () => {
@@ -315,13 +316,33 @@ describe("withQueryLoader", () => {
             },
         });
         expect(loader.getQuery({
-            orderBy: [["id", "ASC"], ["value", "DESC NULLS LAST"]],
-        }).sql).toContain(`"id" ASC, "test_table_bar"."value" DESC NULLS LAST`);
+            orderBy: [["id", "ASC"], ["value", "DESC"]],
+        }).sql).toContain(`"id" ASC, "test_table_bar"."value" DESC`);
         expect(loader.getQuery({
-            orderBy: ["value", "DESC NULLS LAST"],
-        }).sql).toContain(`"value" DESC NULLS LAST`)
+            orderBy: ["value", "DESC"],
+        }).sql).toContain(`"value" DESC`)
         expect(await loader.load({
-            orderBy: [["value", "DESC NULLS LAST"], ["id", "ASC"]],
+            orderBy: [["value", "DESC"], ["id", "ASC"]],
+        })).toMatchSnapshot();
+    });
+
+    it("Allows using sql fragment for specifying sortable columns", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                value: sql.fragment`COALESCE("uid", "value")`,
+                id: "id",
+            },
+        });
+        expect(loader.getQuery({
+            orderBy: [["id", "ASC"], ["value", "DESC"]],
+        }).sql).toContain(`"id" ASC, COALESCE("uid", "value") DESC`);
+        expect(loader.getQuery({
+            orderBy: ["value", "DESC"],
+        }).sql).toContain(`COALESCE("uid", "value") DESC`)
+        expect(await loader.load({
+            orderBy: [["value", "DESC"], ["id", "ASC"]],
         })).toMatchSnapshot();
     });
 
@@ -338,8 +359,8 @@ describe("withQueryLoader", () => {
             orderBy: ["value", "ASC"]
         })).toThrow();
         expect(loader.getQuery({
-            orderBy: ["date", "DESC NULLS LAST"],
-        }).sql).toContain(`"date" DESC NULLS LAST`);
+            orderBy: ["date", "DESC"],
+        }).sql).toContain(`"date" DESC`);
         expect(await loader.load({
             orderBy: ["date", "DESC"],
         })).toEqual(expect.arrayContaining([]));
@@ -375,7 +396,7 @@ describe("withQueryLoader", () => {
             }
         });
         const query = await loader.getQuery({
-            limit: 1,
+            take: 1,
             where: {
                 largeIds: true,
             }
@@ -383,7 +404,7 @@ describe("withQueryLoader", () => {
         expect(query.sql).toContain('"id" > 5');
         const result = await loader.load({
             select: ['value', 'id'],
-            limit: 1,
+            take: 1,
             where: {
                 id: 8,
                 largeIds: true,
@@ -597,14 +618,14 @@ describe("withQueryLoader", () => {
         });
         const query = await loader.loadOffsetPagination({
             select: ['value'],
-            orderBy: ["value", "ASC NULLS LAST"],
-            limit: 5
+            orderBy: ["value", "ASC"],
+            take: 5
         });
         expect(query.minimumCount).toEqual(expect.any(Number));
         expect(query.count).toBeNull();
         const loaded = await loader.load({
             select: ['value'],
-            limit: 5,
+            take: 5,
         });
         expect(loaded).toEqual(query.edges);
     });
@@ -613,14 +634,14 @@ describe("withQueryLoader", () => {
         const loader = makeQueryLoader({
             ...genericOptions,
         });
-        const limit = 5;
+        const take = 5;
         const query = await loader.loadOffsetPagination({
             select: ['value'],
             takeCount: true,
-            limit
+            take
         });
         expect(query.count).toEqual(expect.any(Number));
-        expect(query.minimumCount).toEqual(limit + 1);
+        expect(query.minimumCount).toEqual(take + 1);
         expect(query.edges[0].postprocessedField).toBeDefined();
     });
 
@@ -634,7 +655,7 @@ describe("withQueryLoader", () => {
         const query = await loader.loadOffsetPagination({
             select: ['value'],
             orderBy: ["userid", "DESC"],
-            limit: 5
+            take: 5
         });
         expect(query.minimumCount).toEqual(query.edges.length + 1);
         expect(query.count).toBeNull();
@@ -647,14 +668,14 @@ describe("withQueryLoader", () => {
         const loader = makeQueryLoader({
             ...genericOptions,
         });
-        const limit = 3;
+        const take = 3;
         const takeNextPages = 2;
         const query = await loader.loadOffsetPagination({
             select: ['value'],
-            limit,
+            take,
             takeNextPages,
         });
-        expect(query.minimumCount).toEqual(query.edges.length + limit*(takeNextPages-1) +1);
+        expect(query.minimumCount).toEqual(query.edges.length + take*(takeNextPages-1) +1);
         expect(query.count).toBeNull();
         expect(query.edges[1].value).toEqual(expect.any(String));
         expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string, postprocessedField: boolean, id: number }>();
@@ -667,7 +688,10 @@ describe("withQueryLoader", () => {
     it("Doesn't allow filtering by unknown columns", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
-            selectableColumns: ["id", "dummyField"]
+            selectableColumns: ["id", "dummyField"],
+            sortableColumns: {
+                id: "id",
+            },
         });
         const parser = loader.getLoadArgs({
             sortableColumns: ["id"],
@@ -694,6 +718,9 @@ describe("withQueryLoader", () => {
         const loader = makeQueryLoader({
             ...genericOptions,
             selectableColumns: ["id", "uid"],
+            sortableColumns: {
+                id: "id",
+            }
         });
         const parser = loader.getLoadArgs({
             sortableColumns: ["id"],
@@ -711,6 +738,9 @@ describe("withQueryLoader", () => {
     it("Doesn't allow sorting by unallowed columns", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
+            sortableColumns: {
+                value: "value",
+            }
         });
         const parser = loader.getLoadArgs({
             sortableColumns: ["value"],
@@ -726,6 +756,9 @@ describe("withQueryLoader", () => {
     it("Allows sorting by valid columns", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
+            sortableColumns: {
+                id: "id",
+            }
         });
         const parser = loader.getLoadArgs({
             sortableColumns: ["id"],
@@ -734,9 +767,9 @@ describe("withQueryLoader", () => {
             orderBy: ["id", "ASC"],
         });
         expect(parsed).toEqual({
-            orderBy: ["id", "ASC"],
+            orderBy: [["id", "ASC"]],
         });
-        expectTypeOf(parsed.orderBy).toMatchTypeOf<["id", string] | null | undefined>();
+        expectTypeOf(parsed.orderBy).toMatchTypeOf<["id", string] | null | undefined | (["id", string] | null | undefined)[]>();
         expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "uid" | "value" | "dummyField" | undefined>();
     });
 
@@ -745,11 +778,76 @@ describe("withQueryLoader", () => {
             ...genericOptions,
         });
         const parser = loader.getLoadArgs({
+            // @ts-expect-error id is not sortable
             sortableColumns: ["id"],
         });
         expect(() => parser.parse({
             orderBy: ["id", "; DELETE * FROM users"],
         })).toThrowErrorMatchingSnapshot();
+    });
+
+    it("Allows sorting with multiple columns", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            sortableColumns: {
+                value: "value",
+                id: "id",
+            }
+        });
+        const parser = loader.getLoadArgs({});
+        const parsed = parser.parse({
+            orderBy: [["id", "ASC"], ["value", "DESC"]],
+        });
+        expect(parsed).toEqual({
+            orderBy: [["id", "ASC"], ["value", "DESC"]],
+        });
+        expectTypeOf(parsed.orderBy?.[0]).toMatchTypeOf<["id" | "value", string] | "value" | "id" | null | undefined>();
+        expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "uid" | "value" | "dummyField" | undefined>();
+    });
+
+    it("Allows sorting with a single column as array", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            sortableColumns: {
+                value: "value",
+                id: "id",
+            }
+        });
+        const parser = loader.getLoadArgs({});
+        const parsed = parser.parse({
+            orderBy: [["id", "DESC"]],
+        });
+        expect(parsed).toEqual({
+            orderBy: [["id", "DESC"]],
+        });
+        expectTypeOf(parsed.orderBy?.[0]).toMatchTypeOf<["id" | "value", string] | "value" | "id" | null | undefined>();
+        expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "uid" | "value" | "dummyField" | undefined>();
+    });
+
+    it("Allows transforming the sort columns as array", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            sortableColumns: {
+                value: "value",
+                id: "id",
+            }
+        });
+        const parser = loader.getLoadArgs({
+            transformSortColumns(columns) {
+                expectTypeOf(columns).toEqualTypeOf<["value" | "id", "ASC" | "DESC" | "ASC" | "DESC"][] | null | undefined>();
+                if (Array.isArray(columns)) {
+                    return [...columns, ["id", "ASC"]];
+                }
+                return columns;
+            }
+        });
+        const parsed = parser.parse({
+            orderBy: ["value", "DESC"],
+        });
+        expect(parsed).toEqual({
+            orderBy: [["value", "DESC"], ["id", "ASC"]],
+        });
+        expectTypeOf(parsed.orderBy?.[0]).toMatchTypeOf<["id" | "value", string] | "value" | "id" | null | undefined>();
     });
 
     it("Allows specifying the selectable columns, and only allows selecting those", async () => {
@@ -851,14 +949,14 @@ describe("withQueryLoader", () => {
             defaultExcludedColumns: ["dummyField"]
         });
         const data = await loader.load({
-            limit: 1,
+            take: 1,
         });
         // @ts-expect-error dummyField is excluded by default
         expect((data[0]).dummyField).toBeUndefined();
         expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, value: string, postprocessedField: boolean }>();
 
         const selected = await loader.load({
-            limit: 1,
+            take: 1,
             select: ["dummyField"]
         }).then(a => a[0]);
         expectTypeOf(selected).toMatchTypeOf<{ id: number, postprocessedField: boolean, dummyField: any }>();
@@ -872,7 +970,7 @@ describe("withQueryLoader", () => {
             defaultExcludedColumns: ["dummyField", "value"],
         });
         const data = await loader.load({
-            limit: 1,
+            take: 1,
         });
         expect(Object.keys(data[0])).toEqual(["id", "uid", "postprocessedField"]);
     });
@@ -883,7 +981,7 @@ describe("withQueryLoader", () => {
             defaultExcludedColumns: ["uid"]
         });
         const data = await loader.load({
-            limit: 1,
+            take: 1,
             select: ["uid"]
         }).then(a => a[0]);
         expect(data.uid).toEqual(expect.any(String));
@@ -907,7 +1005,7 @@ describe("withQueryLoader", () => {
             }
         });
         const data = await loader.load({
-            limit: 1,
+            take: 1,
             select: ["uid"],
             context: {
                 userId: "bla",
@@ -926,7 +1024,7 @@ describe("withQueryLoader", () => {
         });
         const query = loader.getQuery({
             select: ['id'],
-            limit: 1,
+            take: 1,
         });
 
         const data = await db.any(query);

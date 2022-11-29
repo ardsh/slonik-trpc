@@ -50,6 +50,56 @@ exports[`withQueryLoader Allows ordering by multiple columns 1`] = `
 ]
 `;
 
+exports[`withQueryLoader Allows using sql fragment for specifying sortable columns 1`] = `
+[
+  {
+    "id": 1,
+    "uid": "z",
+    "value": "aaa",
+  },
+  {
+    "id": 2,
+    "uid": "y",
+    "value": "aaa",
+  },
+  {
+    "id": 3,
+    "uid": "x",
+    "value": "bbb",
+  },
+  {
+    "id": 4,
+    "uid": "w",
+    "value": "bbb",
+  },
+  {
+    "id": 5,
+    "uid": "v",
+    "value": "ccc",
+  },
+  {
+    "id": 6,
+    "uid": "u",
+    "value": "ccc",
+  },
+  {
+    "id": 7,
+    "uid": "t",
+    "value": "ddd",
+  },
+  {
+    "id": 8,
+    "uid": "s",
+    "value": "ddd",
+  },
+  {
+    "id": 9,
+    "uid": "r",
+    "value": "eee",
+  },
+]
+`;
+
 exports[`withQueryLoader Doesn't allow invalid types 1`] = `
 "[
   {
@@ -68,16 +118,46 @@ exports[`withQueryLoader Doesn't allow invalid types 1`] = `
 exports[`withQueryLoader Doesn't allow sorting by unallowed columns 1`] = `
 "[
   {
-    "received": "id",
-    "code": "invalid_enum_value",
-    "options": [
-      "value"
+    "code": "invalid_union",
+    "unionErrors": [
+      {
+        "issues": [
+          {
+            "received": "id",
+            "code": "invalid_enum_value",
+            "options": [
+              "value"
+            ],
+            "path": [
+              "orderBy",
+              0,
+              0
+            ],
+            "message": "Invalid enum value. Expected 'value', received 'id'"
+          }
+        ],
+        "name": "ZodError"
+      },
+      {
+        "issues": [
+          {
+            "code": "too_small",
+            "minimum": 2,
+            "inclusive": true,
+            "type": "array",
+            "path": [
+              "orderBy"
+            ],
+            "message": "Array must contain at least 2 element(s)"
+          }
+        ],
+        "name": "ZodError"
+      }
     ],
     "path": [
-      "orderBy",
-      0
+      "orderBy"
     ],
-    "message": "Invalid enum value. Expected 'value', received 'id'"
+    "message": "Invalid input"
   }
 ]"
 `;
@@ -85,19 +165,47 @@ exports[`withQueryLoader Doesn't allow sorting by unallowed columns 1`] = `
 exports[`withQueryLoader Doesn't allow sorting with invalid directions 1`] = `
 "[
   {
-    "received": "; DELETE * FROM users",
-    "code": "invalid_enum_value",
-    "options": [
-      "ASC",
-      "DESC",
-      "ASC NULLS LAST",
-      "DESC NULLS LAST"
+    "code": "invalid_union",
+    "unionErrors": [
+      {
+        "issues": [
+          {
+            "received": "; DELETE * FROM users",
+            "code": "invalid_enum_value",
+            "options": [
+              "ASC",
+              "DESC"
+            ],
+            "path": [
+              "orderBy",
+              0,
+              1
+            ],
+            "message": "Invalid enum value. Expected 'ASC' | 'DESC', received '; DELETE * FROM users'"
+          }
+        ],
+        "name": "ZodError"
+      },
+      {
+        "issues": [
+          {
+            "code": "too_small",
+            "minimum": 2,
+            "inclusive": true,
+            "type": "array",
+            "path": [
+              "orderBy"
+            ],
+            "message": "Array must contain at least 2 element(s)"
+          }
+        ],
+        "name": "ZodError"
+      }
     ],
     "path": [
-      "orderBy",
-      1
+      "orderBy"
     ],
-    "message": "Invalid enum value. Expected 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST', received '; DELETE * FROM users'"
+    "message": "Invalid input"
   }
 ]"
 `;
