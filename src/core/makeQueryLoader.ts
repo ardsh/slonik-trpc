@@ -45,7 +45,7 @@ type LoadParameters<
     take?: number;
     /** Specify the count of items to skip, usually (currentPage - 1) * take */
     skip?: number;
-    orderBy?: [TSortable] extends [never] ? never : OptionalArray<[TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
+    orderBy?: [TSortable] extends [never] ? never : OptionalArray<[TSortable, 'ASC' | 'DESC']> | null;
     context?: TContext;
     where?: RecursiveFilterConditions<TFilter>;
 };
