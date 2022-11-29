@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.3.0
+
+### Minor Changes
+
+-   991910c: Improved sorting API
+
 ## 0.2.4
 
 ### Patch Changes
