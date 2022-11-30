@@ -1,5 +1,13 @@
 # slonik-trpc
 
+## 0.3.3
+
+### Patch Changes
+
+-   b1736ab: - Improved performance of virtual fields
+
+    -   Added searchAfter in loadArgs
+
 ## 0.3.2
 
 ### Patch Changes
