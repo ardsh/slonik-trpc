@@ -65,7 +65,7 @@ type LoadParameters<
      * ```
     */
     searchAfter?: {
-        [x in TSortable]: string | number
+        [x in TSortable]: string | number | boolean
     },
     orderBy?: [TSortable] extends [never] ? never : OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
     context?: TContext;
@@ -114,6 +114,22 @@ function resolveTransformers<TData>(dataTransformers: any[], rows: readonly TDat
             ...data,
         });
     }));
+}
+
+function getSelectedKeys(allKeys: string[], selected?: readonly any[], excluded?: readonly any[], required?: readonly any[], defaultExcluded?: readonly string[]) {
+    const noneSelected = !selected?.length;
+    const noneExcluded = !excluded?.length;
+    if (noneSelected && noneExcluded) {
+        if (defaultExcluded?.length) {
+            return allKeys.filter(key => !defaultExcluded.includes(key))
+        } else {
+            return allKeys;
+        }
+    }
+    if (noneSelected && !noneExcluded) return allKeys.filter(key => !excluded.includes(key) || required?.includes(key));
+    if (!noneSelected && noneExcluded) return allKeys.filter(key => selected.includes(key) || required?.includes(key));
+    if (!noneSelected && !noneExcluded) return allKeys.filter(key => (!excluded.includes(key) && selected.includes(key)) || required?.includes(key));
+    return allKeys;
 }
 
 export function makeQueryLoader<
@@ -189,6 +205,29 @@ export function makeQueryLoader<
             (z.never() as never);
     const orderByWithoutTransform = z.tuple([sortFields, orderDirection]);
     const orderByType = z.tuple([sortFields.transform(field => options.sortableColumns?.[field] || field), orderDirection]);
+
+    const mapTransformRows = async <T>(rows: readonly T[], select?: readonly string[], exclude?: readonly (string | number | symbol)[]): Promise<readonly T[]> => {
+        if (options.virtualFields) {
+            const keys = Object.keys(options.virtualFields);
+            const selected = getSelectedKeys(keys, select, exclude, options.required, options.defaultExcludedColumns);
+            if (selected.length) {
+                await Promise.all(selected.map(async key => {
+                    for (const row of rows as any[]) {
+                        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                        const value = options.virtualFields![key]!.resolve(row);
+                        if (typeof (value as PromiseLike<any>)?.then === 'function') {
+                            row[key] = await value;
+                        } else {
+                            // Doesn't slow down non-promisified virtual fields.
+                            row[key] = value;
+                        }
+                    }
+                }));
+            }
+        }
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        return (options.postprocess ? await Promise.all(rows.map((row) => options.postprocess!(row))) as never : rows);
+    }
     const getQuery = <
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
         TExclude extends keyof (TVirtuals & z.infer<TObject>) = never,//TDefaultExcluded[number], Shouldn't exclude defaults
@@ -225,28 +264,6 @@ export function makeQueryLoader<
         const noneExcluded = !exclude?.length;
         if (typeof options?.postprocess === 'function') {
             dataTransformers.push(options.postprocess);
-        }
-        const virtuals = Object.keys(options?.virtualFields || {});
-        if (virtuals.length) {
-            const selected = select || [];
-            const transformer = virtuals
-                .map((key: any) => {
-                    if ((noneSelected || selected.includes(key)) &&
-                        (noneExcluded || !exclude?.includes(key)) &&
-                        options?.virtualFields?.[key]?.resolve) {
-                        return [key, options?.virtualFields?.[key]?.resolve] as const;
-                    }
-                    return null;
-                })
-                .filter(notEmpty);
-            transformer.forEach(([key, transformer]) => {
-                if (typeof transformer === 'function') {
-                    dataTransformers.push((data) => {
-                        data[key] = transformer(data);
-                        return data;
-                    })
-                }
-            })
         }
         const orderExpressions = Array.isArray(orderBy?.[0]) ? orderBy?.map(order => orderByWithoutTransform.parse(order)) :
             orderBy?.length ? [orderByWithoutTransform.parse(orderBy)] : null;
@@ -376,6 +393,12 @@ export function makeQueryLoader<
             skip: z.number().optional().default(0),
             takeCount: z.boolean().optional(),
             takeNextPages: z.number().optional(),
+            searchAfter: z.object(sortableColumns.reduce((acc, column) => {
+                acc[column] = z.union([z.string(), z.number(), z.boolean()]).nullish()
+                return acc;
+            }, {} as {
+                [x in TSort]: z.ZodType
+            })).partial(),
             orderBy: typeof transformSortColumns === 'function' ? orderBy.transform(columns => {
                 if (Array.isArray(columns)) {
                     if (Array.isArray(columns[0])) {
@@ -410,11 +433,8 @@ export function makeQueryLoader<
             const db = database || options?.db;
             if (!db?.any) throw new Error("Database not provided");
             const finalQuery = getQuery(args);
-            return db.any(finalQuery).then(rows => {
-                if (dataTransformers.length) {
-                    return resolveTransformers(dataTransformers, rows);
-                }
-                return rows;
+            return db.any(finalQuery).then(async rows => {
+                return mapTransformRows(rows, args.select, args.exclude);
             });
         },
         /**
@@ -467,7 +487,7 @@ export function makeQueryLoader<
                 .then(async (edges) => {
                     const slicedEdges = edges.slice(0, args.take || undefined);
                     return {
-                        edges: (dataTransformers.length ? await resolveTransformers(dataTransformers, slicedEdges) : slicedEdges),
+                        edges: await mapTransformRows(slicedEdges, args.select, args.exclude),
                         hasNextPage: edges.length > slicedEdges.length,
                         minimumCount: (args.skip || 0) + edges.length,
                         count: await countPromise.catch(err => console.error('Count query failed', err)),

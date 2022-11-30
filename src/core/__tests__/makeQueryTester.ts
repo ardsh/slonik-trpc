@@ -2,7 +2,7 @@ import { createPool, CommonQueryMethods, sql } from 'slonik';
 import { createQueryLoggingInterceptor } from "slonik-interceptor-query-logging";
 import { createResultParserInterceptor } from '../../helpers/resultParserInterceptor';
 
-function getPostgresUrl(): string {
+export function getPostgresUrl(): string {
     return process.env.POSTGRES_DSN || `postgres://${encodeURIComponent(process.env.PGUSER || 'postgres')}:${encodeURIComponent(process.env.PGPASSWORD || '')}@${
         process.env.PGHOST || '0.0.0.0'
     }:${process.env.PGPORT || '5432'}/${process.env.PGDATABASE || 'postgres'}`;
@@ -25,7 +25,7 @@ export function makeQueryTester(namespace?: string) {
         },
     });
 
-    beforeAll(async () => {
+    const setup = async () => {
         if (namespace) {
             await (await pool).query(sql.unsafe`
                 CREATE SCHEMA IF NOT EXISTS ${sql.identifier([namespace])};
@@ -74,9 +74,12 @@ export function makeQueryTester(namespace?: string) {
                 ('s', 'Dulce', 'Espinoza', 'dulce23@gmail.com'),
                 ('r', 'Paucek', 'Clayton', 'paucek.deangelo@hotmail.com');
         `);
-    });
+    };
+    if ((global as any).beforeAll) {
+        beforeAll(setup);
+    }
 
-    afterAll(async () => {
+    const teardown = async () => {
         await (await pool).query(sql.unsafe`
             DROP TABLE IF EXISTS test_table_bar;
             DROP TABLE IF EXISTS users;
@@ -88,8 +91,13 @@ export function makeQueryTester(namespace?: string) {
         }
 
         await (await pool).end();
-    });
+    };
+    if ((global as any).afterAll) {
+        afterAll(teardown);
+    }
     return {
         db,
+        setup,
+        teardown,
     };
 }

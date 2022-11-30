@@ -6,11 +6,7 @@ import { makeQueryTester } from './makeQueryTester';
 import { createFilters, makeFilter } from '../queryFilter';
 import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } from '../../helpers/sqlUtils';
 import { expectTypeOf } from 'expect-type';
-
-type ReturnFirstArgument<T> = T extends (...args: readonly [(infer A)]) => any ? <G extends A=A>(...args: readonly [G]) => G : T;
-const createOptions: ReturnFirstArgument<typeof makeQueryLoader> = ((options) => {
-    return options;
-});
+import { createOptions } from '../../index';
 
 describe("withQueryLoader", () => {
     const { db } = makeQueryTester();
@@ -1083,6 +1079,9 @@ describe("withQueryLoader", () => {
         });
         expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "id" < $3)`)
         expect(query.sql).toContain(`ORDER BY "value" DESC, "id" DESC`)
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        expect(args).toEqual(parsed);
     });
 
     it("Loads cursor-based even when sorted by complex expression column", async () => {
@@ -1116,6 +1115,9 @@ describe("withQueryLoader", () => {
             minimumCount: 1,
             count: null,
         });
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        expect(args).toEqual(parsed);
     });
 
     it("Reverses the order when take parameter is negative", async () => {
@@ -1152,6 +1154,9 @@ describe("withQueryLoader", () => {
             minimumCount: 3,
             count: null,
         });
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        expect(args).toEqual(parsed);
     });
 
     it("Cursor-based pagination doesn't work properly if searchAfter values aren't specified (NOT A BUG) (UNSPECIFIED BEHAVIOR, MAY CHANGE)", async () => {
@@ -1171,8 +1176,10 @@ describe("withQueryLoader", () => {
             take: 1,
             orderBy: [["id", "ASC"], ["value", "ASC"]] as const
         };
-        const data = await loader.loadPagination(args as any);
-        const query = loader.getQuery(args as any);
+        // @ts-expect-error a value is missing
+        const data = await loader.loadPagination(args);
+        // @ts-expect-error a value is missing
+        const query = loader.getQuery(args);
         expect(data).toEqual({
             edges: [{
                 id: 3,
@@ -1184,6 +1191,9 @@ describe("withQueryLoader", () => {
         });
         expect(query.sql).toContain(`("id" > $1) OR ("id" = $2 AND "value" IS NULL)`)
         expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        expect(args).toEqual(parsed);
     });
 
     it("Cursor-based pagination doesn't work properly if searchAfter values aren't specified for primary column (NOT A BUG) (UNSPECIFIED BEHAVIOR, MAY CHANGE)", async () => {
@@ -1203,10 +1213,12 @@ describe("withQueryLoader", () => {
             take: 1,
             orderBy: [["id", "ASC"], ["value", "ASC"]] as const
         };
-        const query = loader.getQuery(args as any);
+        // @ts-expect-error a value is missing
+        const query = loader.getQuery(args);
         expect(query.sql).toContain(`("id" IS NULL) OR (TRUE AND "value" > $1)`)
         expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
-        const data = await loader.loadPagination(args as any);
+        // @ts-expect-error a value is missing
+        const data = await loader.loadPagination(args);
         expect(data).toEqual({
             edges: [{
                 id: 5,
@@ -1216,5 +1228,8 @@ describe("withQueryLoader", () => {
             minimumCount: 2,
             count: null,
         });
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        expect(args).toEqual(parsed);
     });
 });
