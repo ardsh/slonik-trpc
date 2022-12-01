@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.4.0
+
+### Minor Changes
+
+-   bb218ec: Added column groups
+
 ## 0.3.3
 
 ### Patch Changes
