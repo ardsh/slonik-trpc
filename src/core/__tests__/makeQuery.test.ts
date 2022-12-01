@@ -414,6 +414,10 @@ describe("withQueryLoader", () => {
         db,
         query: sql.type(zodType)`SELECT * FROM test_table_bar`,
         required: ["id"],
+        columnGroups: {
+            ids: ["id", "uid"],
+            values: ["id", "dummyField"],
+        },
         filters: {
             filters: {
                 largeIds: z.boolean(),
@@ -977,7 +981,8 @@ describe("withQueryLoader", () => {
         });
         const data = await loader.load({
             take: 1,
-            select: ["uid"]
+            select: ["uid"],
+            selectGroups: ["ids"]
         }).then(a => a[0]);
         expect(data.uid).toEqual(expect.any(String));
         expectTypeOf(data).toEqualTypeOf<{ uid: string, postprocessedField: boolean, id: number }>();
@@ -1038,7 +1043,9 @@ describe("withQueryLoader", () => {
         const data = await loader.load({
             select: ['id'],
             searchAfter: {
-                id: 5
+                id: 5,
+                // @ts-expect-error non-existing value specified
+                invalidValue: 'string',
             },
             take: 1,
             orderBy: ["id", "ASC"]
@@ -1066,7 +1073,9 @@ describe("withQueryLoader", () => {
             take: 1,
             orderBy: [["value", "DESC"], ["id", "DESC"]] as const
         };
-        const data = await loader.loadPagination(args);
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        const data = await loader.loadPagination(parsed);
         const query = loader.getQuery(args);
         expect(data).toEqual({
             edges: [{
@@ -1079,8 +1088,6 @@ describe("withQueryLoader", () => {
         });
         expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "id" < $3)`)
         expect(query.sql).toContain(`ORDER BY "value" DESC, "id" DESC`)
-        const parser = loader.getLoadArgs();
-        const parsed = parser.parse(args);
         expect(args).toEqual(parsed);
     });
 
@@ -1106,6 +1113,7 @@ describe("withQueryLoader", () => {
         expect(query.sql).toContain(`(UPPER("value") < $1) OR (UPPER("value") = $2 AND "id" < $3)`)
         expect(query.sql).toContain(`ORDER BY UPPER("value") DESC, "id" DESC`)
         const data = await loader.loadPagination(args);
+        expectTypeOf(data.edges[0]).toEqualTypeOf<{ id: number, value: string }>();
         expect(data).toEqual({
             edges: [{
                 id: 1,
@@ -1176,9 +1184,7 @@ describe("withQueryLoader", () => {
             take: 1,
             orderBy: [["id", "ASC"], ["value", "ASC"]] as const
         };
-        // @ts-expect-error a value is missing
         const data = await loader.loadPagination(args);
-        // @ts-expect-error a value is missing
         const query = loader.getQuery(args);
         expect(data).toEqual({
             edges: [{
@@ -1213,11 +1219,11 @@ describe("withQueryLoader", () => {
             take: 1,
             orderBy: [["id", "ASC"], ["value", "ASC"]] as const
         };
-        // @ts-expect-error a value is missing
-        const query = loader.getQuery(args);
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        const query = loader.getQuery(parsed);
         expect(query.sql).toContain(`("id" IS NULL) OR (TRUE AND "value" > $1)`)
         expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
-        // @ts-expect-error a value is missing
         const data = await loader.loadPagination(args);
         expect(data).toEqual({
             edges: [{
@@ -1228,8 +1234,96 @@ describe("withQueryLoader", () => {
             minimumCount: 2,
             count: null,
         });
-        const parser = loader.getLoadArgs();
-        const parsed = parser.parse(args);
         expect(args).toEqual(parsed);
+    });
+
+    // Column groups
+    it("Allows specifying column groups and selecting them", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const data = await loader.load({
+            take: 1,
+            selectGroups: ["ids"]
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, postprocessedField: boolean }>();
+        expect(data[0]).toEqual({
+            id: expect.any(Number),
+            uid: expect.any(String),
+            postprocessedField: expect.any(Boolean),
+        });
+    });
+
+    it("Works with multiple groups", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            columnGroups: {
+                ids: ["id", "uid"],
+                values: ["id", "dummyField"],
+                all: ["dummyField", "uid"],
+            },
+        });
+        const data = await loader.load({
+            take: 1,
+            selectGroups: ["ids"]
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, postprocessedField: boolean }>();
+        expect(data[0]).toEqual({
+            id: expect.any(Number),
+            uid: expect.any(String),
+            postprocessedField: expect.any(Boolean),
+        });
+    });
+
+    it("Disallows selecting non-existing groups but acts as if all were selected (BUG)", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const data = await loader.load({
+            take: 1,
+            // @ts-expect-error nonSelectable group selected
+            selectGroups: ["nonSelectable"]
+        });
+        // expectTypeOf(data[0]).toMatchTypeOf<{ id: number, uid: string, postprocessedField: boolean, dummyField: any, value: string }>();
+        expect(data[0]).toEqual({
+            id: expect.any(Number),
+            uid: expect.any(String),
+            value: expect.any(String),
+            dummyField: expect.anything(),
+            postprocessedField: expect.any(Boolean),
+        });
+    });
+
+    it("Excluding has priority over selectGroups", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const data = await loader.load({
+            take: 1,
+            exclude: ["uid"],
+            selectGroups: ["ids"],
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, postprocessedField: boolean }>();
+        expect(data[0]).toEqual({
+            id: expect.any(Number),
+            postprocessedField: expect.any(Boolean),
+        });
+    });
+
+    it("SelectGroups has priority over default exclusion", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            defaultExcludedColumns: ["uid"],
+        });
+        const data = await loader.load({
+            take: 1,
+            selectGroups: ["ids"],
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, postprocessedField: boolean }>();
+        expect(data[0]).toEqual({
+            id: expect.any(Number),
+            uid: expect.any(String),
+            postprocessedField: expect.any(Boolean),
+        });
     });
 });

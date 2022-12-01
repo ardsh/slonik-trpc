@@ -36,6 +36,7 @@ type LoadParameters<
     TSelect extends keyof TObject,
     TExclude extends keyof TObject = never,
     TSortable extends string = never,
+    TGroupSelectable extends string = never,
 > = {
     /** The fields that should be included. If unspecified, all fields are returned. */
     select?: readonly TSelect[];
@@ -67,17 +68,19 @@ type LoadParameters<
     searchAfter?: {
         [x in TSortable]?: string | number | boolean | null
     },
+    selectGroups?: readonly [TGroupSelectable, ...TGroupSelectable[]],
     orderBy?: [TSortable] extends [never] ? never : OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
     context?: TContext;
     where?: RecursiveFilterConditions<TFilter>;
 };
 
-type ResultType<
+export type ResultType<
     TObject extends z.AnyZodObject,
     TVirtuals extends Record<string, any>,
     TPostprocessed extends Record<string, any>,
     TDefaultExcluded extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
     TRequired extends readonly [keyof z.infer<TObject>, ...(keyof z.infer<TObject>)[]],
+    TGroupSelected extends keyof (TVirtuals & z.infer<TObject>),
     TSelect extends keyof (TVirtuals & z.infer<TObject>),
     TExclude extends keyof (TVirtuals & z.infer<TObject>)
 > = Omit<
@@ -86,9 +89,13 @@ type ResultType<
     Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
     Pick<
         TVirtuals & z.infer<TObject>,
-        [TSelect] extends [never] ? Exclude<keyof (TVirtuals & z.infer<TObject>), TDefaultExcluded> : (TSelect | TRequired[number])
+        [TSelect] extends [never] ?
+            [TGroupSelected] extends [never] ?
+                Exclude<keyof (TVirtuals & z.infer<TObject>), TDefaultExcluded> :
+            (TGroupSelected | TRequired[number]) :
+        (TSelect | TRequired[number] | TGroupSelected)
     >,
-    [TExclude] extends [never] ? Exclude<TDefaultExcluded, TSelect> : Exclude<TExclude, TRequired[number]>
+    [TExclude] extends [never] ? Exclude<TDefaultExcluded, TSelect | TGroupSelected> : Exclude<TExclude, TRequired[number]>
 >;
 
 const countQueryType = z.object({
@@ -121,6 +128,11 @@ export function makeQueryLoader<
     TPostprocessed extends Record<string, any> = z.infer<TObject>,
     // TSortable extends keyof z.infer<TObject> = never,
     TSortable extends string = never,
+    // TGroupKeys extends Exclude<keyof TGroups, number | symbol> = never,
+    // TGroupKeys extends string = string,
+    TGroups extends {
+        [x: string]: readonly [Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>, ...(Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>)[]]
+    } = Record<string, never>,
     TSelectable extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
     TDefaultExcluded extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol> = never
@@ -151,6 +163,7 @@ export function makeQueryLoader<
     sortableColumns?: {
         [key in TSortable]: string | [string, string] | [string, string, string] | FragmentSqlToken
     };
+    columnGroups?: TGroups,
     selectableColumns?: readonly [TSelectable, ...TSelectable[]];
     defaultExcludedColumns?: readonly [TDefaultExcluded, ...TDefaultExcluded[]];
     /**
@@ -215,6 +228,7 @@ export function makeQueryLoader<
     const getQuery = <
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
         TExclude extends keyof (TVirtuals & z.infer<TObject>) = never,//TDefaultExcluded[number], Shouldn't exclude defaults
+        TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
     >({
         where,
         take,
@@ -222,6 +236,7 @@ export function makeQueryLoader<
         orderBy,
         context,
         searchAfter,
+        selectGroups,
         select,
         exclude,
     }: LoadParameters<
@@ -230,14 +245,18 @@ export function makeQueryLoader<
         TPostprocessed & TVirtuals & z.infer<TObject>,
         (TSelect | TRequired[number]) & TSelectable,
         TExclude,
-        TSortable
+        TSortable,
+        TGroupSelected
     >) => {
         const whereCondition = interpretFilters?.(where || ({} as any), context);
+        if (selectGroups?.length) {
+            const groupFields = selectGroups.flatMap(group => options.columnGroups?.[group] || []);
+            select = (select || []).concat(...groupFields as any[]);
+        }
         const isPartial = select?.length || exclude?.length || options.defaultExcludedColumns?.length;
         const reverse = !!take && take < 0;
         if (take && take < 0) take = -take;
-        // TODO: Add virtual fields transformations to zodType with transform optionally.
-        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TPostprocessed, TDefaultExcluded, TRequired, TSelect, TExclude>>
+        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TPostprocessed, TDefaultExcluded, TRequired, TGroups[TGroupSelected][number], TSelect, TExclude>>
             = (isPartial ? type.partial() : type) as any;
         if (options.defaultExcludedColumns && !exclude) {
             exclude = Array.from(options.defaultExcludedColumns)
@@ -401,7 +420,8 @@ export function makeQueryLoader<
         // By default, select all fields (string covers all), and don't exclude any fields
         async load<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
-            TExclude extends keyof (TVirtuals & z.infer<TObject>) = never
+            TExclude extends keyof (TVirtuals & z.infer<TObject>) = never,
+            TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
         >(
             args: LoadParameters<
                 TFilter,
@@ -409,9 +429,14 @@ export function makeQueryLoader<
                 TPostprocessed & TVirtuals & z.infer<TObject>,
                 (TSelect | TRequired[number]) & TSelectable,
                 TExclude,
-                TSortable
+                TSortable,
+                TGroupSelected
             >, database?: Pick<CommonQueryMethods, "any">
         ) {
+            if (args.selectGroups?.length) {
+                const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
+                args.select = (args.select || []).concat(...groupFields as any[]);
+            }
             const db = database || options?.db;
             if (!db?.any) throw new Error("Database not provided");
             const finalQuery = getQuery(args);
@@ -426,7 +451,8 @@ export function makeQueryLoader<
          */
         async loadPagination<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
-            TExclude extends keyof (TVirtuals & z.infer<TObject>) = never
+            TExclude extends keyof (TVirtuals & z.infer<TObject>) = never,
+            TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
         >(
             args: LoadParameters<
                 TFilter,
@@ -434,12 +460,17 @@ export function makeQueryLoader<
                 TPostprocessed & TVirtuals & z.infer<TObject>,
                 (TSelect | TRequired[number]) & TSelectable,
                 TExclude,
-                TSortable
+                TSortable,
+                TGroupSelected
             > & {
                 takeCount?: boolean;
                 takeNextPages?: number;
             }, database?: Pick<CommonQueryMethods, "any">
         ) {
+            if (args.selectGroups?.length) {
+                const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
+                args.select = (args.select || []).concat(...groupFields as any[]);
+            }
             const db = database || options?.db;
             if (!db?.any) throw new Error("Database not provided");
             const reverse = !!args.take && args.take < 0 ? -1 : 1;
