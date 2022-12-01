@@ -95,27 +95,6 @@ const countQueryType = z.object({
     count: z.number(),
 });
 
-function resolveTransformers<TData>(dataTransformers: any[], rows: readonly TData[]): Promise<TData[]> {
-    return Promise.all(rows.map(async (data) => {
-        const promises = await Promise.all(dataTransformers.map(async (transformer) => {
-            const newData = await transformer(data);
-            for (const key in newData) {
-                // TODO: Separate virtual fields from overall transformers to not need to await each key
-                newData[key] = await newData[key];
-            }
-            return newData ?? data;
-        }));
-        return promises.reduce((acc, transformed) => {
-            return {
-                ...acc,
-                ...transformed,
-            }
-        }, {
-            ...data,
-        });
-    }));
-}
-
 function getSelectedKeys(allKeys: string[], selected?: readonly any[], excluded?: readonly any[], required?: readonly any[], defaultExcluded?: readonly string[]) {
     const noneSelected = !selected?.length;
     const noneExcluded = !excluded?.length;
@@ -207,22 +186,31 @@ export function makeQueryLoader<
     const orderByType = z.tuple([sortFields.transform(field => options.sortableColumns?.[field] || field), orderDirection]);
 
     const mapTransformRows = async <T>(rows: readonly T[], select?: readonly string[], exclude?: readonly (string | number | symbol)[]): Promise<readonly T[]> => {
+        if (!rows.length) return rows;
         if (options.virtualFields) {
             const keys = Object.keys(options.virtualFields);
             const selected = getSelectedKeys(keys, select, exclude, options.required, options.defaultExcludedColumns);
             if (selected.length) {
+                // const promises = [];
+                // for (const key of selected) {
                 await Promise.all(selected.map(async key => {
-                    for (const row of rows as any[]) {
-                        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                        const value = options.virtualFields![key]!.resolve(row);
-                        if (typeof (value as PromiseLike<any>)?.then === 'function') {
-                            row[key] = await value;
-                        } else {
-                            // Doesn't slow down non-promisified virtual fields.
-                            row[key] = value;
+                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                    const firstResolve = options.virtualFields![key]!.resolve(rows[0]);
+                    if (typeof (firstResolve as PromiseLike<any>)?.then === 'function') {
+                        await Promise.all(rows.slice(1).map(async (row: any) => {
+                            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                            row[key] = await options.virtualFields![key]!.resolve(row);
+                        }));
+                        (rows as any)[0][key] = await firstResolve;
+                    } else {
+                        (rows as any)[0][key] = firstResolve;
+                        for (const row of rows.slice(1) as any[]) {
+                            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                            row[key] = options.virtualFields![key]!.resolve(row);
                         }
                     }
                 }));
+                // await Promise.all(promises);
             }
         }
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

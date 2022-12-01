@@ -1,10 +1,11 @@
 {
     "name": "slonik-trpc",
-    "version": "0.3.3",
+    "version": "0.3.4",
     "description": "Slonik tRPC loader",
     "main": "lib/index.js",
     "types": "lib/index.d.ts",
     "scripts": {
+        "benchmarks": "ts-node src/core/__tests__/benchmarks.ts",
         "build": "tsc",
         "format": "prettier --write \"src/**/*.(js|ts)\"",
         "lint": "eslint src --ext .js,.ts",
@@ -48,6 +49,7 @@
     "devDependencies": {
         "@changesets/cli": "^2.25.2",
         "@types/jest": "^29.0.3",
+        "@types/node": "^16.18.4",
         "@typescript-eslint/eslint-plugin": "^5.38.0",
         "@typescript-eslint/parser": "^5.43.0",
         "eslint": "^8.23.1",
@@ -58,6 +60,7 @@
         "slonik": "^33.0.3",
         "slonik-interceptor-query-logging": "^1.4.7",
         "ts-jest": "^29.0.1",
+        "ts-node": "^10.9.1",
         "typescript": "4.5.5",
         "zod": "^3.19.1"
     },
