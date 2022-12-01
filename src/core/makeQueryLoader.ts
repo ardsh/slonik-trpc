@@ -65,7 +65,7 @@ type LoadParameters<
      * ```
     */
     searchAfter?: {
-        [x in TSortable]: string | number | boolean
+        [x in TSortable]?: string | number | boolean | null
     },
     orderBy?: [TSortable] extends [never] ? never : OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
     context?: TContext;
@@ -176,7 +176,6 @@ export function makeQueryLoader<
     if (!type || !type.keyof || !type.partial) throw new Error('Invalid query type provided: ' + (type));
     type TFilter = z.infer<ZodPartial<TFilterTypes>>;
     const interpretFilters = options?.filters?.interpreters ? makeFilter<TFilterTypes, z.infer<TContextZod>>(options.filters.interpreters, options.filters?.options) : null;
-    const dataTransformers = [] as ((data: any) => any)[];
     const sortableAliases = Object.keys(options?.sortableColumns || {}) as [TSortable, ...TSortable[]];
     const sortFields = sortableAliases.length
             ? z.enum(sortableAliases)
@@ -185,14 +184,12 @@ export function makeQueryLoader<
     const orderByWithoutTransform = z.tuple([sortFields, orderDirection]);
     const orderByType = z.tuple([sortFields.transform(field => options.sortableColumns?.[field] || field), orderDirection]);
 
-    const mapTransformRows = async <T>(rows: readonly T[], select?: readonly string[], exclude?: readonly (string | number | symbol)[]): Promise<readonly T[]> => {
+    const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], select?: readonly string[], exclude?: readonly (string | number | symbol)[]): Promise<readonly T[]> => {
         if (!rows.length) return rows;
         if (options.virtualFields) {
             const keys = Object.keys(options.virtualFields);
             const selected = getSelectedKeys(keys, select, exclude, options.required, options.defaultExcludedColumns);
             if (selected.length) {
-                // const promises = [];
-                // for (const key of selected) {
                 await Promise.all(selected.map(async key => {
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                     const firstResolve = options.virtualFields![key]!.resolve(rows[0]);
@@ -210,7 +207,6 @@ export function makeQueryLoader<
                         }
                     }
                 }));
-                // await Promise.all(promises);
             }
         }
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -250,9 +246,6 @@ export function makeQueryLoader<
         }
         const noneSelected = !select?.length;
         const noneExcluded = !exclude?.length;
-        if (typeof options?.postprocess === 'function') {
-            dataTransformers.push(options.postprocess);
-        }
         const orderExpressions = Array.isArray(orderBy?.[0]) ? orderBy?.map(order => orderByWithoutTransform.parse(order)) :
             orderBy?.length ? [orderByWithoutTransform.parse(orderBy)] : null;
         const conditions = [whereCondition].filter(notEmpty);
@@ -270,14 +263,15 @@ export function makeQueryLoader<
                     expressions.map(([expression, direction, columnAlias], innerIndex) => {
                         let operator = sql.fragment`=`;
                         let nullFragment = sql.fragment`TRUE`;
+                        const value = searchAfter[columnAlias];
                         if (innerIndex === expressions.length - 1) {
                             operator = direction === (reverse ? "DESC" : "ASC")
                                 ? sql.fragment`>` : sql.fragment`<`;
-                            if (searchAfter[columnAlias] === null || searchAfter[columnAlias] === undefined) {
+                            if (value === null || value === undefined) {
                                 nullFragment = sql.fragment`${expression} IS NULL`;
                             }
                         }
-                        return searchAfter[columnAlias] !== null && searchAfter[columnAlias] !== undefined ? sql.fragment`${expression} ${operator} ${searchAfter[columnAlias]}`
+                        return value !== null && value !== undefined ? sql.fragment`${expression} ${operator} ${value}`
                             : nullFragment;
                     }), sql.fragment` AND `)})`;
                 }),
@@ -382,11 +376,11 @@ export function makeQueryLoader<
             takeCount: z.boolean().optional(),
             takeNextPages: z.number().optional(),
             searchAfter: z.object(sortableColumns.reduce((acc, column) => {
-                acc[column] = z.union([z.string(), z.number(), z.boolean()]).nullish()
+                acc[column] = z.any();
                 return acc;
             }, {} as {
-                [x in TSort]: z.ZodType
-            })).partial(),
+                [x in TSort]: z.ZodTypeAny
+            })).partial().optional(),
             orderBy: typeof transformSortColumns === 'function' ? orderBy.transform(columns => {
                 if (Array.isArray(columns)) {
                     if (Array.isArray(columns[0])) {
