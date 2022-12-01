@@ -68,7 +68,7 @@ type LoadParameters<
     searchAfter?: {
         [x in TSortable]?: string | number | boolean | null
     },
-    selectGroups?: readonly [TGroupSelectable, ...TGroupSelectable[]],
+    selectGroups?: readonly TGroupSelectable[],
     orderBy?: [TSortable] extends [never] ? never : OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
     context?: TContext;
     where?: RecursiveFilterConditions<TFilter>;
@@ -379,6 +379,9 @@ export function makeQueryLoader<
             ? z.enum(selectColumns)
             : // If unspecified, any field is allowed to be selected
             (z.string() as never)
+        type ColumnGroup = Exclude<keyof TGroups, number | symbol>;
+        const groups = Object.keys(options.columnGroups || {}) as [ColumnGroup, ...ColumnGroup[]];
+        const groupsEnum = groups.length ? z.enum(groups) : z.never() as never;
         const orderBy = z.preprocess(
             (a) => (Array.isArray(a) && Array.isArray(a[0]) ? a : [a].filter(notEmpty)),
             z.union([z.array(orderTuple), orderTuple]).optional()
@@ -394,6 +397,7 @@ export function makeQueryLoader<
             skip: z.number().optional().default(0),
             takeCount: z.boolean().optional(),
             takeNextPages: z.number().optional(),
+            selectGroups: z.array(groupsEnum).optional(),
             searchAfter: z.object(sortableColumns.reduce((acc, column) => {
                 acc[column] = z.any();
                 return acc;

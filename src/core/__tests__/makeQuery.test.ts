@@ -764,10 +764,13 @@ describe("withQueryLoader", () => {
         });
         const parsed = parser.parse({
             orderBy: ["id", "ASC"],
+            selectGroups: ["ids"],
         });
         expect(parsed).toEqual({
             orderBy: [["id", "ASC"]],
+            selectGroups: ["ids"],
         });
+        expectTypeOf(parsed.selectGroups?.[0]).toEqualTypeOf<"ids" | "values" | undefined>();
         expectTypeOf(parsed.orderBy).toMatchTypeOf<["id", string] | null | undefined | (["id", string] | null | undefined)[]>();
         expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "uid" | "value" | "dummyField" | undefined>();
     });
@@ -883,6 +886,34 @@ describe("withQueryLoader", () => {
             select: ["uid"]
         });
         expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"uid" | undefined>();
+    });
+
+    it("Disallows selecting non-existent groups", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const parser = loader.getLoadArgs({});
+        expect(() => parser.parse({
+            selectGroups: ["invalidGroup"]
+        })).toThrow(/Invalid enum/);
+    });
+
+    it("Allows selecting many groups", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            columnGroups: {
+                one: ["dummyField", "id"],
+                two: ["id", "uid"],
+            }
+        });
+        const parser = loader.getLoadArgs({});
+        const parsed = parser.parse({
+            selectGroups: ["one", "two"]
+        });
+        expectTypeOf(parsed.selectGroups?.[0]).toEqualTypeOf<"one" | "two" | undefined>();
+        expect(parsed).toEqual({
+            selectGroups: ["one", "two"],
+        });
     });
 
     // getSelectableFields
