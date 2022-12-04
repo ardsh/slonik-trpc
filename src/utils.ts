@@ -5,6 +5,7 @@ export {
     arrayFilter,
     booleanFilter,
     dateFilter,
+    genericFilter,
     dateFilterType,
     arrayStringFilterType,
     invertFilter,

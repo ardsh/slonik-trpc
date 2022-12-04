@@ -59,13 +59,13 @@ export type FilterOptions<
 > = {
     /** Use this to pre-process any filters to make them consistent */
     preprocess?: (
-        filters: z.infer<ZodPartial<TFilter>>,
+        filters: RecursiveFilterConditions<z.infer<ZodPartial<TFilter>>>,
         context: TContext
     ) => z.infer<ZodPartial<TFilter>>;
     /** Use this to add any extra conditions, e.g. for forced authorization checks */
     postprocess?: (
         conditions: SqlFragment[],
-        filters: z.infer<ZodPartial<TFilter>>,
+        filters: RecursiveFilterConditions<z.infer<ZodPartial<TFilter>>>,
         context: TContext
     ) => SqlFragment[];
 };

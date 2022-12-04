@@ -48,6 +48,16 @@ export const booleanFilter = (
     return null;
 };
 
+export const genericFilter = (
+    value: any,
+    statement: Fragment,
+) => {
+    if (value !== null && value !== undefined) {
+        return statement;
+    }
+    return null;
+};
+
 export const dateFilter = (
     date: z.infer<typeof dateFilterType> | undefined | null,
     field: Fragment

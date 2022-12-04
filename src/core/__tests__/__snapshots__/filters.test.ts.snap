@@ -30,7 +30,7 @@ exports[`AND Filters 2`] = `
 
 exports[`AND Filters deeply nested with OR 1`] = `
 {
-  "sql": "("value" ILIKE '%cheap%') AND ((((("uid" = ANY($1::"text"[])) AND ((("value" ILIKE '%cheap%')))) OR ((NOT ( "date" < NOW() ))))) AND (("id" = $2::"numeric"[]))) AND (uid = 'x') AND (uid = 'anotherFilter')",
+  "sql": "("value" ILIKE '%cheap%') AND ((((("uid" = ANY($1::"text"[])) AND (NOT (NOT ( "value" ILIKE '%cheap%' )))) OR ((NOT ( "date" < NOW() ))))) AND (("id" = $2::"numeric"[]))) AND (uid = 'x') AND (uid = 'anotherFilter')",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [

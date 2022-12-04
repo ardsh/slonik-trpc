@@ -36,12 +36,18 @@ const data = await slonik.query(loader.getQuery({
 }));
 ```
 
-You can also exclude specific fields, especially if they're doing heavy joins.
+You can also group columns together, to make selections easier
 
 ```ts
+const loader = makeQueryLoader({
+    columnGroups: {
+        basic: ["id", "name"],
+    },
+    db: slonikConnection,
+    query,
+});
 const data = await slonik.query(loader.getQuery({
-    // All other fields will be returned
-    exclude: ["complexField"],
+    selectGroups: ["basic"], // Returns only id and name
 }));
 ```
 
@@ -54,7 +60,7 @@ input: loader.getLoadArgs(),
 async resolve({ ctx, input }) {
     return loader.loadPagination({
         ...input,
-        context: ctx,
+        ctx,
     });
 }
 ```
@@ -65,7 +71,7 @@ You don't have to use loadPagination/load if you're using `getQuery`, and can ex
 async resolve({ ctx, input }) {
     return slonik.query(loader.getQuery({
         ...input,
-        context: ctx,
+        ctx,
     }));
 }
 ```
@@ -222,6 +228,7 @@ Contributions, issues and feature requests are welcome!<br />Feel free to check 
 
 - Prisma generator similar to [zod-prisma](https://github.com/CarterGrimmeisen/zod-prisma) that automatically creates data loaders from prisma schemas.
 - Automatically syncing the zod types with sql, using something like [@slonik/typegen](https://github.com/mmkal/slonik-tools/tree/main/packages/typegen)
+- Wildcards in selects, e.g. `select: ["name*"]` to select all fields that start with name.
 
 ## 📝 License
 

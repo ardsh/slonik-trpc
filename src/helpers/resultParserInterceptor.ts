@@ -23,7 +23,7 @@ export const createResultParserInterceptor = (): Interceptor => {
                 const msg = validationResult.error.issues.map(
                     (issue, idx) => `Error #${idx + 1}: Code: ${issue.code} ~ Path: ${issue.path.join('->')} ~ Message: ${issue.message}`
                 );
-                log.error(msg.join('\n'));
+                console.error(msg.join('\n'));
                 throw new SchemaValidationError(
                     actualQuery,
                     row as any,

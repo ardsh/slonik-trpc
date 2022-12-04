@@ -119,9 +119,9 @@ addCombinedFilter("AND Filters deeply nested with OR", ({
     AND: [{
         OR: [{
             uid: ['y', 'x'],
-            AND: [{
-                isCheap: true,
-            }]
+            NOT: {
+                isCheap: false,
+            }
         }, {
             isBeforeNow: false,
         }]
