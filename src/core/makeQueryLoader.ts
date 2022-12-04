@@ -345,9 +345,10 @@ export function makeQueryLoader<
         type ColumnGroup = Exclude<keyof TGroups, number | symbol>;
         const groups = Object.keys(options.columnGroups || {}) as [ColumnGroup, ...ColumnGroup[]];
         const groupsEnum = groups.length ? z.enum(groups) : z.never() as never;
+        const orderUnion = z.union([z.array(orderTuple), orderTuple]).optional();
         const orderBy = z.preprocess(
             (a) => (Array.isArray(a) && Array.isArray(a[0]) ? a : [a].filter(notEmpty)),
-            z.union([z.array(orderTuple), orderTuple]).optional()
+            orderUnion
         );
         type ActualFilters = RecursiveFilterConditions<
             z.infer<ZodPartial<TFilterTypes>>>;
@@ -374,7 +375,7 @@ export function makeQueryLoader<
                     }
                 }
                 return columns;
-            }) as never : orderBy,
+            }) as never : orderBy as unknown as typeof orderUnion,
             where: options?.filters?.filters ? recursiveFilterConditions(options?.filters?.filters).nullish() as unknown as z.ZodType<ActualFilters> : z.any() as never,
         }).partial();
     };

@@ -2423,9 +2423,9 @@ signal-exit@^3.0.0, signal-exit@^3.0.2, signal-exit@^3.0.3:
   integrity sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==
 
 slonik-trpc@*:
-  version "0.4.1"
-  resolved "https://registry.yarnpkg.com/slonik-trpc/-/slonik-trpc-0.4.1.tgz#4f1bb34aa2311a5defb4877872a14b70f4c777bf"
-  integrity sha512-KZKI0X/yimcrdeZMr/vN9c/ky72Nz+M39/w6sth64E35J3AjpLHkwn/5YmON9bXgQEpev0BjN7GF0bS/sYST+A==
+  version "0.5.0"
+  resolved "https://registry.yarnpkg.com/slonik-trpc/-/slonik-trpc-0.5.0.tgz#20855a6c2bab8e91b48d0804157145ac85dc06e3"
+  integrity sha512-d9yJGudAegfklShaOBEEx2NE1ECfxCQHk3Ot647I00h6JSkGYyyirFHhDw3+dvvftBEna7bX9ASMwqeu7+YbcQ==
 
 slonik@*:
   version "33.0.4"

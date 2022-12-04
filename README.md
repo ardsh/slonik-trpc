@@ -169,7 +169,7 @@ const virtualFieldsLoader = makeQueryLoader({
 
 The virtual fields can then be selected/excluded like normal fields.
 
-Refer to the [playground file](./src/core/__tests__/playground.test.ts) for more examples.
+Refer to the [playground](https://stackblitz.com/github/ardsh/slonik-trpc/examples/minimal-trpc) for a more complete example.
 
 ## Features
 
