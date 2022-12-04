@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.5.0
+
+### Minor Changes
+
+-   3ef653f: Removed exclude and require options
+
 ## 0.4.0
 
 ### Minor Changes
