@@ -17,14 +17,7 @@ export type Context = Awaited<ReturnType<typeof createContext>>;
 export const appRouter = t.router({
     loadPosts: t.procedure
         .input(postsLoader.getLoadArgs())
-        .query(({ input, ctx }) => {
-            return postsLoader.loadPagination({
-                ...input,
-                select: input.select,
-                // selectGroups: input.selectGroups,
-                ctx,
-            })
-        }),
+        .query(postsLoader.loadPagination),
     greet: t.procedure
         .input((val: unknown) => {
             if (typeof val === "string") return val;

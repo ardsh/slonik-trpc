@@ -36,39 +36,42 @@ type LoadParameters<
     TSelect extends keyof TObject,
     TSortable extends string = never,
     TGroupSelectable extends string = never,
+    TExtraInput = Record<never, any>,
 > = {
+    input: {
     /** The fields that should be included. If unspecified, all fields are returned. */
-    select?: readonly TSelect[];
-    /** The amount of rows to query. To page backwards, set take to a negative value */
-    take?: number;
-    /** Specify the count of items to skip, usually (currentPage - 1) * take */
-    skip?: number;
-    /**
-     * Cursor-based pagination requires you to sort by a sequential, unique column such as an ID or a timestamp.
-     * Use this parameter to pass the current item sortable values, after which you'd like to load.
-     * E.g.
-     * ```ts
-     * searchAfter: {
-     *     id: lastPageItemId
-     * }
-     * orderBy: [["id", "ASC"]]
-     * ```
-     * Or with multiple column sorting
-     * ```ts
-     * searchAfter: {
-     *     createdAt: lastItemTimestamp,
-     *     id: lastItemId,
-     * },
-     * orderBy: [["createdAt", "DESC"], ["id", "ASC"]]
-     * ```
-    */
-    searchAfter?: {
-        [x in TSortable]?: string | number | boolean | null
-    },
-    selectGroups?: readonly TGroupSelectable[],
-    orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+        select?: readonly TSelect[];
+        /** The amount of rows to query. To page backwards, set take to a negative value */
+        take?: number;
+        /** Specify the count of items to skip, usually (currentPage - 1) * take */
+        skip?: number;
+        /**
+         * Cursor-based pagination requires you to sort by a sequential, unique column such as an ID or a timestamp.
+         * Use this parameter to pass the current item sortable values, after which you'd like to load.
+         * E.g.
+         * ```ts
+         * searchAfter: {
+         *     id: lastPageItemId
+         * }
+         * orderBy: [["id", "ASC"]]
+         * ```
+         * Or with multiple column sorting
+         * ```ts
+         * searchAfter: {
+         *     createdAt: lastItemTimestamp,
+         *     id: lastItemId,
+         * },
+         * orderBy: [["createdAt", "DESC"], ["id", "ASC"]]
+         * ```
+        */
+        searchAfter?: {
+            [x in TSortable]?: string | number | boolean | null
+        },
+        selectGroups?: readonly TGroupSelectable[],
+        orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+        where?: RecursiveFilterConditions<TFilter>;
+    } & TExtraInput;
     ctx?: TContext;
-    where?: RecursiveFilterConditions<TFilter>;
 };
 
 export type ResultType<
@@ -211,14 +214,16 @@ export function makeQueryLoader<
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
         TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
     >({
-        where,
-        take,
-        skip,
-        orderBy,
         ctx,
-        searchAfter,
-        selectGroups,
-        select,
+        input: {
+            where,
+            take,
+            skip,
+            orderBy,
+            searchAfter,
+            selectGroups,
+            select,
+        },
     }: LoadParameters<
         TFilter,
         z.infer<TContextZod>,
@@ -395,18 +400,18 @@ export function makeQueryLoader<
                 (TSelect) & TSelectable,
                 TSortable,
                 TGroupSelected
-            >, database?: Pick<CommonQueryMethods, "any">
+            >
         ) {
             // TODO: Remove this
-            if (args.selectGroups?.length) {
-                const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
-                args.select = (args.select || []).concat(...groupFields as any[]);
+            if (args.input.selectGroups?.length) {
+                const groupFields = args.input.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
+                args.input.select = (args.input.select || []).concat(...groupFields as any[]);
             }
-            const db = database || options?.db;
+            const db = options?.db;
             if (!db?.any) throw new Error("Database not provided");
             const finalQuery = getQuery(args);
             return db.any(finalQuery).then(async rows => {
-                return mapTransformRows(rows, args.select);
+                return mapTransformRows(rows, args.input.select);
             });
         },
         /**
@@ -424,36 +429,41 @@ export function makeQueryLoader<
                 TPostprocessed & TVirtuals & z.infer<TObject>,
                 (TSelect) & TSelectable,
                 TSortable,
-                TGroupSelected
-            > & {
-                takeCount?: boolean;
-                takeNextPages?: number;
-            }, database?: Pick<CommonQueryMethods, "any">
+                TGroupSelected, {
+                    takeCount?: boolean;
+                    takeNextPages?: number;
+            }>
         ) {
-            if (args.selectGroups?.length) {
-                const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
-                args.select = (args.select || []).concat(...groupFields as any[]);
+            if (args.input?.selectGroups?.length) {
+                const groupFields = args.input?.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
+                args.input.select = (args.input?.select || []).concat(...groupFields as any[]);
             }
-            const db = database || options?.db;
+            const db = options?.db;
             if (!db?.any) throw new Error("Database not provided");
-            const reverse = !!args.take && args.take < 0 ? -1 : 1;
-            if (typeof args.take === 'number' && args.take < 0) args.take = -args.take;
-            const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (args?.take || 25) + 1;
+            const reverse = !!args.input?.take && args.input?.take < 0 ? -1 : 1;
+            if (typeof args.input?.take === 'number' && args.input.take < 0) args.input.take = -args.input.take;
+            const extraItems = Math.max(Math.min(3, (args.input?.takeNextPages || 0) - 1), 0) * (args.input?.take || 25) + 1;
             const finalQuery = getQuery({
                 ...args,
-                take:
-                    typeof args.take === 'number'
-                        ? // Query an extra row to see if the next page exists
-                          (Math.min(Math.max(0, args.take), 1000) + extraItems) * reverse
-                        : undefined,
+                input: {
+                    ...args.input,
+                    take:
+                        typeof args.input?.take === 'number'
+                            ? // Query an extra row to see if the next page exists
+                            (Math.min(Math.max(0, args.input?.take), 1000) + extraItems) * reverse
+                            : undefined,
+                }
             });
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
                 ...args,
-                take: undefined,
+                input: {
+                    ...args.input,
+                    take: undefined,
+                }
             })}) allrows`;
             // Count is null by default
             let countPromise = Promise.resolve(null as number | null);
-            if (args.takeCount) {
+            if (args.input?.takeCount) {
                 countPromise = db
                     .any(countQuery)
                     .then((res) => res?.[0]?.count);
@@ -461,11 +471,11 @@ export function makeQueryLoader<
             return db
                 .any(finalQuery)
                 .then(async (edges) => {
-                    const slicedEdges = edges.slice(0, args.take || undefined);
+                    const slicedEdges = edges.slice(0, args.input?.take || undefined);
                     return {
-                        edges: await mapTransformRows(slicedEdges, args.select),
+                        edges: await mapTransformRows(slicedEdges, args.input?.select),
                         hasNextPage: edges.length > slicedEdges.length,
-                        minimumCount: (args.skip || 0) + edges.length,
+                        minimumCount: (args.input?.skip || 0) + edges.length,
                         count: await countPromise.catch(err => console.error('Count query failed', err)),
                     };
                 });
