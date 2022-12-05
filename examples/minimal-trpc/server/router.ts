@@ -1,5 +1,6 @@
 import { initTRPC } from "@trpc/server";
 import { postsLoader } from "./loaders/getPosts";
+import type { InferPayload, InferArgs } from 'slonik-trpc';
 
 const t = initTRPC.context<Context>().create({
     errorFormatter({ shape }) {
@@ -34,3 +35,10 @@ export const appRouter = t.router({
 });
 
 export type AppRouter = typeof appRouter;
+
+export type PostLoader = typeof postsLoader;
+
+export type {
+    InferPayload,
+    InferArgs
+}

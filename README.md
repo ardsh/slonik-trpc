@@ -148,6 +148,57 @@ const filters = createFilters<Context>()({
 })
 ```
 
+### Sorting
+
+Define your sortable column aliases. You can use strings or sql fragments to identify the columns.
+
+```ts
+const sortableLoader = makeQueryLoader({
+    query,
+    sortableColumns: {
+        id: sql.fragment`users.id`,
+        name: "name",
+        // All 3 methods are acceptable as long as the specified column is accessible from the FROM query and non-ambiguous
+        createdAt: ["users", "created_at"],
+    },
+});
+
+const sortedByName = await db.any(sortableLoader.getQuery({
+    orderBy: ["name", "ASC"],
+}));
+
+const sortedByNameAndDate = await db.any(sortableLoader.getQuery({
+    orderBy: [["name", "DESC"], ["id", "ASC"]],
+    take: 5,
+}))
+```
+
+If you don't specify any sortableColumns your API won't be sortable with orderBy.
+
+If you specify a negative take, the order will be reversed, this is useful for getting the last page...
+
+```ts
+const lastPage = await db.any(sortableLoader.getQuery({
+    orderBy: [["name", "DESC"], ["id", "ASC"]],
+    take: -25,
+}));
+```
+
+### Cursor-based pagination
+
+If you've enabled sorting, you can use cursor-based pagination with `searchAfter`. Simply specify the values of the item you'd like to paginate after, to use as a cursor.
+
+```ts
+const usersAfterBob = await db.any(sortableLoader.getQuery({
+    orderBy: [["name", "DESC"], ["id", "ASC"]],
+    searchAfter: {
+        name: "Bob",
+        id: 45,
+    },
+    take: 5,
+}))
+```
+
 ### Virtual fields
 
 Virtual fields are only supported when using `load`/`loadPagination` currently.
@@ -169,7 +220,7 @@ const virtualFieldsLoader = makeQueryLoader({
 
 The virtual fields can then be selected/excluded like normal fields.
 
-Refer to the [playground](https://stackblitz.com/github/ardsh/slonik-trpc/examples/minimal-trpc) for a more complete example.
+Refer to the [playground](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc) for a more complete example.
 
 ## Features
 
@@ -189,6 +240,7 @@ Refer to the [playground](https://stackblitz.com/github/ardsh/slonik-trpc/exampl
 
 TypeScript 4.5+
 Slonik 33+
+Zod 3+
 
 ```bash
 yarn add slonik-trpc
@@ -220,6 +272,53 @@ const query = sql.type(z.object({
 ) x`;
 ```
 
+### Inferring returned types in the clientside
+
+Due to [typescript limitations](https://github.com/trpc/trpc/discussions/2150) it's not possible to infer the returned types automatically in the clientside with trpc. So all fields will be selected by default, even if you only select a few.
+
+To get around this, you can use `InferPayload` and pass the arguments as a generic argument.
+
+server
+```ts
+import type { InferPayload, InferArgs } from 'slonik-trpc';
+
+const postsLoader = makeQueryLoader(...);
+
+type PostLoader = typeof postsLoader;
+
+export type {
+    InferPayload, InferArgs, PostLoader
+}
+```
+
+client
+```ts
+const getPosts = <TArgs extends InferArgs<PostLoader>>(args: TArgs) => {
+    return client.loadPosts.query(args) as Promise<InferPayload<PostLoader, TArgs>[]>;
+}
+```
+
+Or with hooks + loadPagination and a useful type annotation to replace the pagination `edges` key easily.
+
+```ts
+import type { InferArgs, InferPayload, Post } from '../../server';
+
+type ReplaceEdges<TResult, TPayload> = TResult extends { edges?: ArrayLike<any>, hasNextPage?: boolean } ? Omit<TResult, "edges"> & {
+    edges: TPayload[]
+} : TResult extends object ? {
+    [K in keyof TResult]: ReplaceEdges<TResult[K], TPayload>
+} : TResult;
+
+const getPosts = <TArgs extends InferArgs<PostLoader>>(args: TArgs) => {
+    const result = trpc.loadPosts.useQuery(args);
+    return result as ReplaceEdges<typeof result, InferPayload<PostLoader, TArgs>>;
+}
+```
+
+You don't need to do this if your selects are dynamic, in that case simply consider all fields optional.
+
+Also this is not necessary when querying the loader directly in the serverside, in those cases fields will be automatically inferred depending on your selections.
+
 ## 🤝 Contributing
 
 Contributions, issues and feature requests are welcome!<br />Feel free to check [issues page](issues).
@@ -229,6 +328,7 @@ Contributions, issues and feature requests are welcome!<br />Feel free to check 
 - Prisma generator similar to [zod-prisma](https://github.com/CarterGrimmeisen/zod-prisma) that automatically creates data loaders from prisma schemas.
 - Automatically syncing the zod types with sql, using something like [@slonik/typegen](https://github.com/mmkal/slonik-tools/tree/main/packages/typegen)
 - Wildcards in selects, e.g. `select: ["name*"]` to select all fields that start with name.
+- Custom loaders and/or plugins/middlewares for processing query results.
 
 ## 📝 License
 

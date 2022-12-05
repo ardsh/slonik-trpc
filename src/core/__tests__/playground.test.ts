@@ -31,13 +31,6 @@ const selectedOnly = await db.any(selectionLoader.getQuery({
 // Only id and name are available in type now
 expectTypeOf(selectedOnly[0]).toEqualTypeOf<{ id: string, first_name: string }>();
 
-const excludedOnly = await db.any(selectionLoader.getQuery({
-    exclude: ["id", "first_name", "last_name"],
-}));
-
-// id and name are excluded
-expectTypeOf(excludedOnly[0]).toEqualTypeOf<{ email: string, created_at: number }>();
-
 
 const sortableLoader = makeQueryLoader({
     query,

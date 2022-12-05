@@ -111,4 +111,4 @@ async function initializeDatabase(schema?: string) {
     `);
 }
 
-initializeDatabase().catch(err => console.error(err));
+initializeDatabase('minimalexample').catch(err => console.error(err));

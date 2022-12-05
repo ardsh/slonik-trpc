@@ -328,7 +328,7 @@ export function makeQueryLoader<
         }: {
             /** You can remove specific sortable columns to disallow sorting by them */
             sortableColumns?: [TSort, ...TSort[]];
-            selectableColumns?: [TFields, ...TFields[]];
+            selectableColumns?: readonly [TFields, ...TFields[]];
             transformSortColumns?: (columns?: Array<[TSort, OrderDirection]> | null) => Array<[TSort, OrderDirection]> | null | undefined
         } = {} as never
     ) => {
@@ -345,7 +345,7 @@ export function makeQueryLoader<
         type ColumnGroup = Exclude<keyof TGroups, number | symbol>;
         const groups = Object.keys(options.columnGroups || {}) as [ColumnGroup, ...ColumnGroup[]];
         const groupsEnum = groups.length ? z.enum(groups) : z.never() as never;
-        const orderUnion = z.union([z.array(orderTuple), orderTuple]).optional();
+        const orderUnion = z.union([z.array(orderTuple), orderTuple]).nullish();
         const orderBy = z.preprocess(
             (a) => (Array.isArray(a) && Array.isArray(a[0]) ? a : [a].filter(notEmpty)),
             orderUnion
@@ -380,6 +380,7 @@ export function makeQueryLoader<
         }).partial();
     };
     const self = {
+        _columnGroups: options.columnGroups,
         getSelectableFields,
         getLoadArgs,
         getQuery,
@@ -473,3 +474,46 @@ export function makeQueryLoader<
     }
     return self;
 }
+
+export type InferPayload<
+    TLoader extends {
+        load: (...args: any) => any
+    },
+    TArgs extends TLoader extends {
+        loadPagination: (...args: readonly [infer A]) => any
+    } ? Omit<A, "ctx" | "orderBy" | "searchAfter" | "skip" | "take" | "takeCount" | "takeNextPages" | "where"> : never,
+    TResult = TLoader extends {
+        load: (...args: any) => PromiseLike<ArrayLike<infer A>>
+    } ? A : any,
+    TSelect extends Exclude<keyof TResult, number | symbol> = TArgs extends {
+        select: ArrayLike<infer A>
+    } ? A extends Exclude<keyof TResult, number | symbol> ? A : never : never,
+    TGroups extends {
+        [x: string]: Exclude<keyof TResult, number | symbol>[]
+    } = TLoader extends {
+        _columnGroups: infer A
+    } ? A extends Record<string, Exclude<keyof TResult, number | symbol>[]> ? A : never : never,
+    TGroupSelected extends Exclude<keyof TGroups, number | symbol> = TArgs extends {
+        selectGroups: ArrayLike<infer A>
+    } ? A extends Exclude<keyof TGroups, number | symbol> ? A : never : never,
+> = Pick<
+    TResult,
+    [TSelect] extends [never] ?
+        [TGroupSelected] extends [never] ?
+            keyof TResult :
+        (TGroups[TGroupSelected][number]) :
+    (TSelect | TGroups[TGroupSelected][number])
+>;
+
+type Mutable<T> = T & {
+    -readonly[P in keyof T]: Mutable<T[P]>
+};
+
+export type InferArgs<
+    TLoader extends {
+        load: (...args: any) => any
+    },
+    TArgs = TLoader extends {
+        loadPagination: (...args: readonly [infer A]) => any
+    } ? A : any,
+> = Mutable<Omit<TArgs, "ctx">>;
