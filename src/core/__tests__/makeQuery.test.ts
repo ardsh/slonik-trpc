@@ -33,18 +33,11 @@ describe("withQueryLoader", () => {
                 uid: z.string(),
                 value: z.string(),
             }),
-            postprocess(data) {
-                return {
-                    ...data,
-                    someOtherField: 'blabla'
-                }
-            },
         });
         const result = await loader.load({});
         expect(result[0].id).toEqual(expect.any(Number));
-        expect(result[0].someOtherField).toEqual('blabla');
         expect(result).not.toHaveLength(0);
-        expectTypeOf(result[0]).toEqualTypeOf<{ id: number, uid: string, value: string, someOtherField: string }>();
+        expectTypeOf(result[0]).toEqualTypeOf<{ id: number, uid: string, value: string }>();
     });
 
     it("Works with sql query type", async () => {
@@ -217,71 +210,20 @@ describe("withQueryLoader", () => {
         expectTypeOf(query.edges[0]).toEqualTypeOf<{ ids: string, field: number }>();
     });
 
-    it("Allows post-processing results", async () => {
+    it("Allows selecting fields", async () => {
         const loader = makeQueryLoader({
             db,
             query: sql.fragment`SELECT * FROM test_table_bar`,
             type: zodType,
-            postprocess(data) {
-                return {
-                    ...data,
-                    someOtherField: 'blabla',
-                }
-            }
         });
         const query = await loader.loadPagination({
             select: ['value'],
             skip: 1,
             take: 1
         });
-        expect(query.edges[0]?.someOtherField).toEqual('blabla');
-        expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string, someOtherField: string }>();
+        expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string }>();
         expect(loader.getSelectableFields()).not.toContain("someOtherField")
         expectTypeOf(loader.getSelectableFields()[0]).toEqualTypeOf<["id", "uid", "value"][number]>()
-    });
-
-    it("Allows post-processing results as a promise", async () => {
-        const loader = makeQueryLoader({
-            db,
-            query: sql.fragment`SELECT * FROM test_table_bar`,
-            type: zodType,
-            async postprocess(data) {
-                const result = await new Promise<string>(res => res('blabla'));
-                return {
-                    ...data,
-                    someOtherField: result,
-                }
-            }
-        });
-        const query = await loader.load({
-            select: ['value'],
-            take: 1
-        });
-        expect(query[0]?.someOtherField).toEqual('blabla');
-        expectTypeOf(query[0]).toEqualTypeOf<{ value: string, someOtherField: string }>();
-        expect(loader.getSelectableFields()).not.toContain("someOtherField")
-        expectTypeOf(loader.getSelectableFields()[0]).toEqualTypeOf<["id", "uid", "value"][number]>()
-    });
-
-    it("Throws errors that occur during post-processing", async () => {
-        const loader = makeQueryLoader({
-            db,
-            query: sql.fragment`SELECT * FROM test_table_bar`,
-            type: zodType,
-            async postprocess(data) {
-                const result = await new Promise<string>((res, rej) => rej('Error fetching!'));
-                return {
-                    ...data,
-                    someOtherField: result,
-                }
-            }
-        });
-
-        // eslint-disable-next-line jest/valid-expect
-        expect(loader.load({
-            select: ['value'],
-            take: 1
-        })).rejects.toEqual("Error fetching!");
     });
 
     it("Throws errors that occur in virtual fields", async () => {
@@ -456,12 +398,6 @@ describe("withQueryLoader", () => {
                 dependencies: ["id", "uid"],
             }
         },
-        postprocess(data) {
-            return {
-                ...data,
-                postprocessedField: true,
-            }
-        }
     } as const);
 
     it("Selects all fields if select is unspecified", async () => {
@@ -472,7 +408,7 @@ describe("withQueryLoader", () => {
         expect(result[0].id).toEqual(expect.any(Number));
         expect(result[0].uid).toEqual(expect.any(String));
         expect(result[0].value).toEqual(expect.any(String));
-        expectTypeOf(result[0]).toMatchTypeOf<{ uid: string, id: number, postprocessedField: boolean, value: string, dummyField: any }>();
+        expectTypeOf(result[0]).toMatchTypeOf<{ uid: string, id: number, value: string, dummyField: any }>();
     });
 
     it("Doesn't work well if select is conditional with empty array (needs as any assertion to select all) (BUG)", async () => {
@@ -485,7 +421,7 @@ describe("withQueryLoader", () => {
         });
         expect(result[0].id).toEqual(expect.any(Number));
         expect(result[0].value).toEqual(expect.any(String));
-        expectTypeOf(result[0]).toMatchTypeOf<{ id: number, postprocessedField: boolean, value: string, uid: string, dummyField: any }>();
+        expectTypeOf(result[0]).toMatchTypeOf<{ id: number, value: string, uid: string, dummyField: any }>();
     });
 
     it("Selects dependent fields", async () => {
@@ -503,7 +439,7 @@ describe("withQueryLoader", () => {
             dummyField: expect.any(String),
         }));
         // No need to add dependent fields to type, even if they're actually present.
-        expectTypeOf(result[0]).toMatchTypeOf<{ postprocessedField: boolean, dummyField: any }>();
+        expectTypeOf(result[0]).toMatchTypeOf<{ dummyField: any }>();
         expect(result[0].dummyField).toEqual(expect.any(String));
         // No need to have the type in this case
         // @ts-expect-error uid is excluded
@@ -627,7 +563,6 @@ describe("withQueryLoader", () => {
         });
         expect(query.count).toEqual(expect.any(Number));
         expect(query.minimumCount).toEqual(take + 1);
-        expect(query.edges[0].postprocessedField).toBeDefined();
     });
 
     it("Returns minimal count as skip + edges.length + 1 normally", async () => {
@@ -645,8 +580,8 @@ describe("withQueryLoader", () => {
         expect(query.minimumCount).toEqual(query.edges.length + 1);
         expect(query.count).toBeNull();
         const keys = Object.keys(query.edges[0]);
-        expect(keys).toEqual(expect.arrayContaining(["value", "postprocessedField"]));
-        expect(keys).toHaveLength(2);
+        expect(keys).toEqual(expect.arrayContaining(["value"]));
+        expect(keys).toHaveLength(1);
     });
 
     it("Returns minimal count based on next N pages if specified", async () => {
@@ -663,7 +598,7 @@ describe("withQueryLoader", () => {
         expect(query.minimumCount).toEqual(query.edges.length + take*(takeNextPages-1) +1);
         expect(query.count).toBeNull();
         expect(query.edges[1].value).toEqual(expect.any(String));
-        expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string, postprocessedField: boolean }>();
+        expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string }>();
         expect(query.hasNextPage).toEqual(true);
     });
 
@@ -947,7 +882,7 @@ describe("withQueryLoader", () => {
             selectGroups: ["ids"]
         }).then(a => a[0]);
         expect(data.uid).toEqual(expect.any(String));
-        expectTypeOf(data).toEqualTypeOf<{ uid: string, postprocessedField: boolean, id: number }>();
+        expectTypeOf(data).toEqualTypeOf<{ uid: string, id: number }>();
     });
 
     it("Allows specifying context parser", async () => {
@@ -977,7 +912,7 @@ describe("withQueryLoader", () => {
             }
         }).then(a => a[0]);
         expect(data.uid).toEqual(expect.any(String));
-        expectTypeOf(data).toEqualTypeOf<{ uid: string, postprocessedField: boolean }>();
+        expectTypeOf(data).toEqualTypeOf<{ uid: string }>();
     });
 
     it("Passes the context and filters to filter postprocessing", async () => {
@@ -1017,7 +952,7 @@ describe("withQueryLoader", () => {
             }
         }).then(a => a[0]);
         expect(data).toBeUndefined();
-        expectTypeOf(data).toEqualTypeOf<{ uid: string, postprocessedField: boolean }>();
+        expectTypeOf(data).toEqualTypeOf<{ uid: string }>();
     });
 
     it("Query parser is type-safe by default", async () => {
@@ -1249,11 +1184,10 @@ describe("withQueryLoader", () => {
             take: 1,
             selectGroups: ["ids"]
         });
-        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, postprocessedField: boolean }>();
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string }>();
         expect(data[0]).toEqual({
             id: expect.any(Number),
             uid: expect.any(String),
-            postprocessedField: expect.any(Boolean),
         });
     });
 
@@ -1270,11 +1204,10 @@ describe("withQueryLoader", () => {
             take: 1,
             selectGroups: ["ids"]
         });
-        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, postprocessedField: boolean }>();
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string }>();
         expect(data[0]).toEqual({
             id: expect.any(Number),
             uid: expect.any(String),
-            postprocessedField: expect.any(Boolean),
         });
     });
 
@@ -1287,13 +1220,12 @@ describe("withQueryLoader", () => {
             // @ts-expect-error nonSelectable group selected
             selectGroups: ["nonSelectable"]
         });
-        // expectTypeOf(data[0]).toMatchTypeOf<{ id: number, uid: string, postprocessedField: boolean, dummyField: any, value: string }>();
+        // expectTypeOf(data[0]).toMatchTypeOf<{ id: number, uid: string, dummyField: any, value: string }>();
         expect(data[0]).toEqual({
             id: expect.any(Number),
             uid: expect.any(String),
             value: expect.any(String),
             dummyField: expect.anything(),
-            postprocessedField: expect.any(Boolean),
         });
     });
 
@@ -1305,11 +1237,10 @@ describe("withQueryLoader", () => {
             take: 1,
             selectGroups: ["ids"],
         });
-        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, postprocessedField: boolean }>();
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string }>();
         expect(data[0]).toEqual({
             id: expect.any(Number),
             uid: expect.any(String),
-            postprocessedField: expect.any(Boolean),
         });
     });
 });

@@ -57,24 +57,6 @@ export const testLoader = async (opts?: { name?: string } & Omit<Parameters<type
 };
 
 async function benchmark() {
-    const postProcessing = await testLoader({
-        name: 'postProcessing',
-        postprocess(data) {
-            return {
-                ...data,
-                postprocessedField: data.uid,
-            }
-        },
-    });
-    const postProcessingPromises = await testLoader({
-        name: 'postProcessingPromises',
-        async postprocess(data) {
-            return {
-                ...data,
-                postprocessedField: data.uid,
-            };
-        },
-    });
     const loader = await testLoader();
     const withVirtualFields = await testLoader({
         name: 'virtualFields',

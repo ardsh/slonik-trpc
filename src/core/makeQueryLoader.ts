@@ -74,13 +74,9 @@ type LoadParameters<
 export type ResultType<
     TObject extends z.AnyZodObject,
     TVirtuals extends Record<string, any>,
-    TPostprocessed extends Record<string, any>,
     TGroupSelected extends keyof (TVirtuals & z.infer<TObject>),
     TSelect extends keyof (TVirtuals & z.infer<TObject>),
-> = // Include only the difference of TPostprocessed - TVirtuals
-    // Because only those fields are always present after post-processing
-    Omit<RemoveAny<TPostprocessed>, keyof (TPostprocessed | (z.infer<TObject> & TVirtuals))> &
-    Pick<
+> = Pick<
         TVirtuals & Omit<z.infer<TObject>, keyof TVirtuals>, // Virtual fields can overwrite real fields
         [TSelect] extends [never] ?
             [TGroupSelected] extends [never] ?
@@ -111,7 +107,6 @@ export function makeQueryLoader<
     TFragment extends SqlFragment | QuerySqlToken,
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
     TVirtuals extends Record<string, any> = z.infer<TObject>,
-    TPostprocessed extends Record<string, any> = z.infer<TObject>,
     // TSortable extends keyof z.infer<TObject> = never,
     TSortable extends string = never,
     // TGroupKeys extends Exclude<keyof TGroups, number | symbol> = never,
@@ -160,11 +155,6 @@ export function makeQueryLoader<
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
     };
-    /** A function to postprocess the output.
-     * Do NOT use this to declare virtual fields, it's much more limited.
-     * Instead, use this when it's necessary to change an existing field, e.g. easier formatting.
-     * */
-    postprocess?: (data: z.infer<TObject>) => PromiseLike<TPostprocessed> | TPostprocessed;
 }) {
     const query = options.query;
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
@@ -204,8 +194,7 @@ export function makeQueryLoader<
                 }));
             }
         }
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        return (options.postprocess ? await Promise.all(rows.map((row) => options.postprocess!(row))) as never : rows);
+        return rows;
     }
     const getQuery = <
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
@@ -222,7 +211,7 @@ export function makeQueryLoader<
     }: LoadParameters<
         TFilter,
         z.infer<TContextZod>,
-        TPostprocessed & TVirtuals & z.infer<TObject>,
+        TVirtuals & z.infer<TObject>,
         (TSelect) & TSelectable,
         TSortable,
         TGroupSelected
@@ -235,7 +224,7 @@ export function makeQueryLoader<
         const isPartial = select?.length || selectGroups?.length;
         const reverse = !!take && take < 0;
         if (take && take < 0) take = -take;
-        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TPostprocessed, TGroups[TGroupSelected][number], TSelect>>
+        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect>>
             = (isPartial ? type.partial() : type) as any;
         const noneSelected = !select?.length;
         const orderExpressions = Array.isArray(orderBy?.[0]) ? orderBy?.map(order => orderByWithoutTransform.parse(order)) :
@@ -392,7 +381,7 @@ export function makeQueryLoader<
             args: LoadParameters<
                 TFilter,
                 z.infer<TContextZod>,
-                TPostprocessed & TVirtuals & z.infer<TObject>,
+                TVirtuals & z.infer<TObject>,
                 (TSelect) & TSelectable,
                 TSortable,
                 TGroupSelected
@@ -422,7 +411,7 @@ export function makeQueryLoader<
             args: LoadParameters<
                 TFilter,
                 z.infer<TContextZod>,
-                TPostprocessed & TVirtuals & z.infer<TObject>,
+                TVirtuals & z.infer<TObject>,
                 (TSelect) & TSelectable,
                 TSortable,
                 TGroupSelected

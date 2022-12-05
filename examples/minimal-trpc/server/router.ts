@@ -21,8 +21,6 @@ export const appRouter = t.router({
         .query(({ input, ctx }) => {
             return postsLoader.loadPagination({
                 ...input,
-                select: input.select,
-                // selectGroups: input.selectGroups,
                 ctx,
             })
         }),

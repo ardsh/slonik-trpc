@@ -229,8 +229,7 @@ Refer to the [playground](https://stackblitz.com/github/ardsh/slonik-trpc/tree/m
   - [x] Ability to add authorization filters based on user auth context.
 - [x] Selecting/excluding columns, to avoid the overfetching problem.
 - [x] Runtime validation of input.
-- [x] Virtual fields (fully type-safe).
-- [x] Post-processing with javascript functions.
+- [x] Virtual field declaration in typescript (fully type-safe).
 - [x] Offset-based pagination.
 - [x] Cursor-based pagination.
 
