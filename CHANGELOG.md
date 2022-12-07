@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.6.1
+
+### Patch Changes
+
+-   f9c9fec: Added context parameter to virtual field resolvers
+
 ## 0.6.0
 
 ### Minor Changes
