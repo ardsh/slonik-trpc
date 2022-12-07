@@ -11,6 +11,7 @@ const query = sql.type(
         id: z.number(),
         title: z.string(),
         content: z.string().nullish(),
+        date: z.string().nullish(),
         first_name: z.string(),
         last_name: z.string(),
         author_id: z.string(),
@@ -20,6 +21,7 @@ const query = sql.type(
 )`SELECT posts.id,
     posts.title,
     posts.content,
+    posts.date,
     author.first_name,
     author.last_name,
     author.email,
@@ -38,7 +40,7 @@ const filters = createFilters<Context>()({
     postLength: z.number(),
     text: z.string(),
 }, {
-    authorName: (name) => name?.length ? sql.fragment`(author_first_name || ' ' || author.last_name) ILIKE ${'%' + name + '%'}` : null,
+    authorName: (name) => name?.length ? sql.fragment`(author.first_name || ' ' || author.last_name) ILIKE ${'%' + name + '%'}` : null,
     id: (value) => arrayFilter(value, sql.fragment`posts.id`),
     author_id: (value) => arrayFilter(value, sql.fragment`posts.author_id`),
     date: (value) => dateFilter(value, sql.fragment`posts.created_at`),
@@ -62,9 +64,10 @@ export const postsLoader = makeQueryLoader({
         name: sql.fragment`author.first_name || author.last_name`,
         createdAt: ["posts", "created_at"],
         title: "title",
+        date: ["posts", "date"],
     },
     columnGroups: {
-        postDetails: ["id", "title", "created_at"],
+        postDetails: ["id", "title", "created_at", "date"],
         author: ["first_name", "last_name", "email", "author_id"],
     },
     virtualFields: {

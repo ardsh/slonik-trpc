@@ -93,17 +93,24 @@ describe("withQueryLoader", () => {
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
             virtualFields: {
                 ids: {
-                    resolve: (row) => {
-                        return row.id + row.uid;
+                    resolve: (row, ctx) => {
+                        expect(ctx).toEqual({
+                            userId: 'r',
+                        });
+                        return row.id + row.uid + ctx.userId;
                     },
                     dependencies: ["id", "uid"],
                 }
             }
         });
         const query = await loader.load({
-            take: 1
+            take: 1,
+            ctx: {
+                userId: 'r',
+            }
         });
-        expect(query[0]?.ids).toEqual(expect.any(String));
+        const row = query[0];
+        expect(row?.ids).toEqual(row.id + row.uid + 'r');
         expect(loader.getSelectableFields()).toContain("ids");
         expectTypeOf(query[0]).toEqualTypeOf<{ id: number, ids: string, uid: string, value: string }>()
     });
@@ -150,6 +157,42 @@ describe("withQueryLoader", () => {
         expectTypeOf(query[0]).toEqualTypeOf<{ id: number, uid: string }>();
         expect(loader.getSelectableFields()).toContain("ids");
         expect(resolve).not.toHaveBeenCalled();
+    });
+
+    it("Passes the context as a 2nd parameter in virtual field resolvers", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            contextParser: z.object({
+                userId: z.string(),
+            }),
+            virtualFields: {
+                ids: {
+                    resolve: async (row, ctx) => {
+                        expect(ctx).toEqual({
+                            userId: 'z'
+                        });
+                        expectTypeOf(ctx).toEqualTypeOf<{ userId: string } | undefined>();
+                        return Promise.resolve(row.id + row.uid);
+                    },
+                    dependencies: ["id", "uid"],
+                }
+            }
+        });
+        const query = await loader.load({
+            take: 1,
+            ctx: {
+                userId: 'z',
+            },
+            select: ['ids'],
+        });
+        expect(query[0]).toEqual(expect.objectContaining({
+            ids: expect.any(String),
+        }));
+        expect(query[0]?.ids).toEqual(expect.any(String));
+        expect(loader.getSelectableFields()).toContain("ids");
+        expectTypeOf(query[0]).toHaveProperty("ids");
+        expectTypeOf(query[0].ids).toEqualTypeOf<string>();
     });
 
     it("Allows returning promises from virtual fields", async () => {
@@ -556,13 +599,31 @@ describe("withQueryLoader", () => {
             ...genericOptions,
         });
         const take = 5;
+        const skip = 2;
         const query = await loader.loadPagination({
             select: ['value'],
             takeCount: true,
+            skip,
             take
         });
-        expect(query.count).toEqual(expect.any(Number));
-        expect(query.minimumCount).toEqual(take + 1);
+        expect(query.count).toEqual(9);
+        expect(query.minimumCount).toEqual(take + skip + 1);
+    });
+
+    it("Returns true total count even if skip is higher than that, minimumCount equal to skip", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const take = 5;
+        const skip = 200;
+        const query = await loader.loadPagination({
+            select: ['value'],
+            takeCount: true,
+            skip,
+            take
+        });
+        expect(query.count).toEqual(9);
+        expect(query.minimumCount).toEqual(skip);
     });
 
     it("Returns minimal count as skip + edges.length + 1 normally", async () => {
@@ -593,10 +654,11 @@ describe("withQueryLoader", () => {
         const query = await loader.loadPagination({
             select: ['value'],
             take,
+            takeCount: true,
             takeNextPages,
         });
         expect(query.minimumCount).toEqual(query.edges.length + take*(takeNextPages-1) +1);
-        expect(query.count).toBeNull();
+        expect(query.count).toBeDefined();
         expect(query.edges[1].value).toEqual(expect.any(String));
         expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string }>();
         expect(query.hasNextPage).toEqual(true);
@@ -1105,6 +1167,22 @@ describe("withQueryLoader", () => {
         expect(args).toEqual(parsed);
     });
 
+    it("Negative take doesn't work when sorting isn't specified", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                upperValue: sql.fragment`UPPER("value")`,
+            }
+        });
+        // eslint-disable-next-line
+        expect(loader.loadPagination({
+            take: -2,
+            select: ['id', 'value'],
+        })).rejects.toThrow(/orderBy must be specified/);
+    });
+
     it("Cursor-based pagination doesn't work properly if searchAfter values aren't specified (NOT A BUG) (UNSPECIFIED BEHAVIOR, MAY CHANGE)", async () => {
         const loader = makeQueryLoader({
             db,
@@ -1155,6 +1233,7 @@ describe("withQueryLoader", () => {
                 value: "bbb",
             },
             take: 1,
+            takeCount: true,
             orderBy: [["id", "ASC"], ["value", "ASC"]] as const
         };
         const parser = loader.getLoadArgs();
@@ -1170,7 +1249,7 @@ describe("withQueryLoader", () => {
             }],
             hasNextPage: true,
             minimumCount: 2,
-            count: null,
+            count: expect.any(Number),
         });
         expect(args).toEqual(parsed);
     });

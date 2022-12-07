@@ -43,6 +43,30 @@ async function main() {
             author_id: post.fullName,
         }))
     );
+
+    const bobPosts = await getPosts({
+        where: {
+            OR: [{
+                authorName: 'Bob'
+            }, {
+                longPost: true,
+            }],
+        },
+        takeCount: true,
+        take: 2,
+    });
+    console.log('Bob posts:');
+    console.log(bobPosts);
+
+    const cursorPagination = await getPosts({
+        searchAfter: {
+            date: '2022-05-01T15:43Z'
+        },
+        orderBy: ["date", "ASC"],
+        take: 1,
+    });
+    console.log("Post after may 1st")
+    console.log(cursorPagination.edges[0]);
 }
 
 main();

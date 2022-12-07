@@ -37,11 +37,27 @@ type LoadParameters<
     TSortable extends string = never,
     TGroupSelectable extends string = never,
 > = {
-    /** The fields that should be included. If unspecified, all fields are returned. */
+    /** The fields that should be included. If `select` and `selectGroups` are unspecified, all fields are returned. */
     select?: readonly TSelect[];
-    /** The amount of rows to query. To page backwards, set take to a negative value */
+    /** The amount of rows to query.
+     * If take is a negative value, it will try to reverse the sort order and paginate backwards.
+     * So
+     * ```ts
+     * take: -25,
+     * orderBy: ["createdAt", "ASC"]
+     * ```
+     * Will be converted to
+     * ```
+     * take: 25,
+     * orderBy: ["createdAt", "DESC"]
+     * ```
+     * automatically, and you'll get the last page's items.
+     * Doesn't do anything if you don't specify orderBy though.
+     * */
     take?: number;
-    /** Specify the count of items to skip, usually (currentPage - 1) * take */
+    /** The amount of items to skip, usually (currentPage - 1) * take.
+     * Used for offset-based pagination
+     * */
     skip?: number;
     /**
      * Cursor-based pagination requires you to sort by a sequential, unique column such as an ID or a timestamp.
@@ -61,12 +77,40 @@ type LoadParameters<
      * },
      * orderBy: [["createdAt", "DESC"], ["id", "ASC"]]
      * ```
-    */
+     * */
     searchAfter?: {
         [x in TSortable]?: string | number | boolean | null
     },
+    /** The `columnGroups` you want to select.
+     * If `selectGroups` and `select` are unspecified, all columns will be selected.
+     * If specified, will select the columns in that group.
+     * E.g. if columnGroups are declared like this
+     * ```ts
+     * columnGroups: {
+     *     basic: ["id", "name", "email"],
+     * }
+     * ```
+     * You can specify
+     * ```ts
+     * selectGroups: ["basic"]
+     * ```
+     * To select all 3 columns
+     * */
     selectGroups?: readonly TGroupSelectable[],
+    /**
+     * Specify the sorting order using sortable column aliases
+     * The columns need to be allowed through the `sortableColumns` option
+     * E.g.
+     * ```ts
+     * [["createdAt", "DESC"], ["id", "ASC"]]
+     * ```
+     * Or
+     * ```ts
+     * ["id", "ASC"]
+     * ```
+     * */
     orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+    /* Pass the context that will be used for filters postprocessing and virtual field resolution */
     ctx?: TContext;
     where?: RecursiveFilterConditions<TFilter>;
 };
@@ -107,10 +151,7 @@ export function makeQueryLoader<
     TFragment extends SqlFragment | QuerySqlToken,
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
     TVirtuals extends Record<string, any> = z.infer<TObject>,
-    // TSortable extends keyof z.infer<TObject> = never,
     TSortable extends string = never,
-    // TGroupKeys extends Exclude<keyof TGroups, number | symbol> = never,
-    // TGroupKeys extends string = string,
     TGroups extends {
         [x: string]: readonly [Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>, ...(Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>)[]]
     } = Record<string, never>,
@@ -118,7 +159,14 @@ export function makeQueryLoader<
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
 >(options: {
     query: TFragment,
+    /** Optional parameter that can be used to override the slonik query parser.
+     * Doesn't need to be used if you use sql.type when declaring the query parameter.
+     * */
     type?: TObject,
+    /**
+     * Optional parameter that can be used to verify the passed context.
+     * Use this if you want to make sure the context always has a specific shape, e.g. when using it for authorization.
+     * */
     contextParser?: TContextZod,
     db?: Pick<CommonQueryMethods, "any">
     /**
@@ -139,19 +187,37 @@ export function makeQueryLoader<
      *     name: "fullName",
      * }
      * ```
-    */
+     * */
     sortableColumns?: {
         [key in TSortable]: string | [string, string] | [string, string, string] | FragmentSqlToken
     };
+    /**
+     * This option is convenient for fetching related columns together.
+     * Column groups that are specified here can be fetched together with the `selectGroups` option when loading.
+     * E.g.
+     * ```ts
+     * columnGroups: {
+     *     basic: ["id", "name", "email"],
+     * }
+     * ```
+     * Then when loading you can simply do
+     * ```ts
+     * selectGroups: ["basic"]
+     * ```
+     * To select all 3 columns.
+     * */
     columnGroups?: TGroups,
+    /**
+     * You can narrow the types that are allowed to be selected with this option.
+     * */
     selectableColumns?: readonly [TSelectable, ...TSelectable[]];
     /**
      * Specify a mapping of virtual fields, with their dependencies
-    */
+     * */
     virtualFields?: {
         [x in keyof TVirtuals]?: {
             /** Return the virtual field */
-            resolve: (row: z.infer<TObject>) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
+            resolve: (row: z.infer<TObject>, ctx?: z.infer<TContextZod>) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
     };
@@ -169,7 +235,7 @@ export function makeQueryLoader<
     const orderByWithoutTransform = z.tuple([sortFields, orderDirection]);
     const orderByType = z.tuple([sortFields.transform(field => options.sortableColumns?.[field] || field), orderDirection]);
 
-    const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], select?: readonly string[]): Promise<readonly T[]> => {
+    const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], select?: readonly string[], ctx?: z.infer<TContextZod>): Promise<readonly T[]> => {
         if (!rows.length) return rows;
         if (options.virtualFields) {
             const keys = Object.keys(options.virtualFields);
@@ -177,18 +243,18 @@ export function makeQueryLoader<
             if (selected.length) {
                 await Promise.all(selected.map(async key => {
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    const firstResolve = options.virtualFields![key]!.resolve(rows[0]);
+                    const firstResolve = options.virtualFields![key]!.resolve(rows[0], ctx);
                     if (typeof (firstResolve as PromiseLike<any>)?.then === 'function') {
                         await Promise.all(rows.slice(1).map(async (row: any) => {
                             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                            row[key] = await options.virtualFields![key]!.resolve(row);
+                            row[key] = await options.virtualFields![key]!.resolve(row, ctx);
                         }));
                         (rows as any)[0][key] = await firstResolve;
                     } else {
                         (rows as any)[0][key] = firstResolve;
                         for (const row of rows.slice(1) as any[]) {
                             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                            row[key] = options.virtualFields![key]!.resolve(row);
+                            row[key] = options.virtualFields![key]!.resolve(row, ctx);
                         }
                     }
                 }));
@@ -224,6 +290,9 @@ export function makeQueryLoader<
         const isPartial = select?.length || selectGroups?.length;
         const reverse = !!take && take < 0;
         if (take && take < 0) take = -take;
+        if (reverse && !orderBy?.length) {
+            throw new Error("orderBy must be specified when take parameter is negative!");
+        }
         const zodType: z.ZodType<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect>>
             = (isPartial ? type.partial() : type) as any;
         const noneSelected = !select?.length;
@@ -318,6 +387,10 @@ export function makeQueryLoader<
             /** You can remove specific sortable columns to disallow sorting by them */
             sortableColumns?: [TSort, ...TSort[]];
             selectableColumns?: readonly [TFields, ...TFields[]];
+            /**
+             * You can enforce sorting constraints with this function.
+             * E.g. ensure only certain columns are sortable, or with particular directions.
+             * */
             transformSortColumns?: (columns?: Array<[TSort, OrderDirection]> | null) => Array<[TSort, OrderDirection]> | null | undefined
         } = {} as never
     ) => {
@@ -336,7 +409,16 @@ export function makeQueryLoader<
         const groupsEnum = groups.length ? z.enum(groups) : z.never() as never;
         const orderUnion = z.union([z.array(orderTuple), orderTuple]).nullish();
         const orderBy = z.preprocess(
-            (a) => (Array.isArray(a) && Array.isArray(a[0]) ? a : [a].filter(notEmpty)),
+            (typeof transformSortColumns === 'function' ? (columns => {
+                if (Array.isArray(columns)) {
+                    if (Array.isArray(columns[0])) {
+                        return transformSortColumns(columns as any) || columns
+                    } else {
+                        return transformSortColumns([columns].filter(notEmpty) as any) || columns;
+                    }
+                }
+                return columns;
+            }) : (a) => (Array.isArray(a) && Array.isArray(a[0]) ? a : [a].filter(notEmpty))),
             orderUnion
         );
         type ActualFilters = RecursiveFilterConditions<
@@ -355,16 +437,7 @@ export function makeQueryLoader<
             }, {} as {
                 [x in TSort]: z.ZodTypeAny
             })).partial().optional() : z.undefined(),
-            orderBy: typeof transformSortColumns === 'function' ? orderBy.transform(columns => {
-                if (Array.isArray(columns)) {
-                    if (Array.isArray(columns[0])) {
-                        return transformSortColumns(columns as any) || columns
-                    } else {
-                        return transformSortColumns([columns] as any) || columns;
-                    }
-                }
-                return columns;
-            }) as never : orderBy as unknown as typeof orderUnion,
+            orderBy: orderBy as unknown as typeof orderUnion,
             where: options?.filters?.filters ? recursiveFilterConditions(options?.filters?.filters).nullish() as unknown as z.ZodType<ActualFilters> : z.any() as never,
         }).partial();
     };
@@ -396,14 +469,15 @@ export function makeQueryLoader<
             if (!db?.any) throw new Error("Database not provided");
             const finalQuery = getQuery(args);
             return db.any(finalQuery).then(async rows => {
-                return mapTransformRows(rows, args.select);
+                return mapTransformRows(rows, args.select, args.ctx);
             });
         },
         /**
          * Returns the data in a pagination-convenient form.
          * Specify takeCount: true to query the overall count as if no limit had been specified.
          * Otherwise, count will be null.
-         */
+         * `take` is limited to 1000 items when using loadPagination, as it's meant to be used for loading only a few pages at a time.
+         * */
         async loadPagination<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
@@ -416,7 +490,24 @@ export function makeQueryLoader<
                 TSortable,
                 TGroupSelected
             > & {
+                /**
+                 * If true, a count query is called to fetch all the rows as if no `take` limit had been specified.
+                 * And the `count` field will return a number.
+                 * Otherwise `count` will be null.
+                 * @default false
+                 * */
                 takeCount?: boolean;
+                /**
+                 * If you specify this parameter, N extra items will be fetched and minimumCount will be returned
+                 * Useful if you want to know whether there are two next pages, simply specify
+                 * ```ts
+                 * take: 25,
+                 * takeNextPages: 2
+                 * ```
+                 * Then minimumCount will be 51, if there are at least 1*25+1 items after the current one.
+                 * @default 1
+                 * @max 4
+                 * */
                 takeNextPages?: number;
             }, database?: Pick<CommonQueryMethods, "any">
         ) {
@@ -428,6 +519,9 @@ export function makeQueryLoader<
             if (!db?.any) throw new Error("Database not provided");
             const reverse = !!args.take && args.take < 0 ? -1 : 1;
             if (typeof args.take === 'number' && args.take < 0) args.take = -args.take;
+            if (reverse === -1 && !args.orderBy?.length) {
+                throw new Error("orderBy must be specified when take parameter is negative!");
+            }
             const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (args?.take || 25) + 1;
             const finalQuery = getQuery({
                 ...args,
@@ -439,6 +533,7 @@ export function makeQueryLoader<
             });
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
                 ...args,
+                skip: undefined,
                 take: undefined,
             })}) allrows`;
             // Count is null by default
@@ -453,7 +548,7 @@ export function makeQueryLoader<
                 .then(async (edges) => {
                     const slicedEdges = edges.slice(0, args.take || undefined);
                     return {
-                        edges: await mapTransformRows(slicedEdges, args.select),
+                        edges: await mapTransformRows(slicedEdges, args.select, args.ctx),
                         hasNextPage: edges.length > slicedEdges.length,
                         minimumCount: (args.skip || 0) + edges.length,
                         count: await countPromise.catch(err => console.error('Count query failed', err)),

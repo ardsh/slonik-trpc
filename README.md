@@ -328,6 +328,7 @@ Contributions, issues and feature requests are welcome!<br />Feel free to check 
 - Automatically syncing the zod types with sql, using something like [@slonik/typegen](https://github.com/mmkal/slonik-tools/tree/main/packages/typegen)
 - Wildcards in selects, e.g. `select: ["name*"]` to select all fields that start with name.
 - Custom loaders and/or plugins/middlewares for processing query results.
+- Integration with [prisma client raw database access](https://www.prisma.io/docs/concepts/components/prisma-client/raw-database-access), and other DB clients, separating data loading from query composition.
 
 ## 📝 License
 
