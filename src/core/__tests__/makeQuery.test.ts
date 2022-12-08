@@ -757,6 +757,29 @@ describe("withQueryLoader", () => {
         expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "uid" | "value" | "dummyField" | undefined>();
     });
 
+    it("Allows empty array in orderBy", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            sortableColumns: {
+                id: "id",
+            }
+        });
+        const parser = loader.getLoadArgs({
+            sortableColumns: ["id"],
+        });
+        const parsed = parser.parse({
+            orderBy: [],
+            selectGroups: ["ids"],
+        });
+        expect(parsed).toEqual({
+            orderBy: [],
+            selectGroups: ["ids"],
+        });
+        expectTypeOf(parsed.selectGroups?.[0]).toEqualTypeOf<"ids" | "values" | undefined>();
+        expectTypeOf(parsed.orderBy).toMatchTypeOf<["id", string] | null | undefined | (["id", string] | null | undefined)[]>();
+        expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "uid" | "value" | "dummyField" | undefined>();
+    });
+
     it("Doesn't allow sorting with invalid directions", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,

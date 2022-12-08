@@ -1,0 +1,37 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model Company {
+    @@map("companies")
+    id         Int      @id @default(autoincrement())
+    name       String
+    created_at DateTime @default(now()) @db.Timestamp(6)
+}
+
+model EmployeeCompany {
+    @@map("employee_companies")
+    employee_id Int
+    company_id  Int
+    start_date  DateTime @db.Date
+    end_date    DateTime @db.Date
+    department  String?
+    job_title   String?
+    salary      Decimal? @db.Decimal
+
+    @@id([employee_id, company_id, start_date, end_date])
+}
+
+model Employee {
+    @@map("employees")
+    id         Int      @id @default(autoincrement())
+    first_name String
+    last_name  String
+    email      String
+    created_at DateTime @default(now()) @db.Timestamp(6)
+}

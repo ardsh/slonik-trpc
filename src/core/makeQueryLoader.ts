@@ -411,14 +411,14 @@ export function makeQueryLoader<
         const orderBy = z.preprocess(
             (typeof transformSortColumns === 'function' ? (columns => {
                 if (Array.isArray(columns)) {
-                    if (Array.isArray(columns[0])) {
+                    if (Array.isArray(columns[0]) || columns[0] === undefined) {
                         return transformSortColumns(columns as any) || columns
                     } else {
                         return transformSortColumns([columns].filter(notEmpty) as any) || columns;
                     }
                 }
                 return columns;
-            }) : (a) => (Array.isArray(a) && Array.isArray(a[0]) ? a : [a].filter(notEmpty))),
+            }) : (a) => (Array.isArray(a) && (Array.isArray(a[0]) || a[0] === undefined) ? a : [a].filter(notEmpty))),
             orderUnion
         );
         type ActualFilters = RecursiveFilterConditions<
