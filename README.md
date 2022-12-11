@@ -56,24 +56,25 @@ const data = await slonik.query(loader.getQuery({
 To use it in trpc declare a query and pass the input.
 
 ```ts
-input: loader.getLoadArgs(),
-async resolve({ ctx, input }) {
-    return loader.loadPagination({
-        ...input,
-        ctx,
-    });
-}
+loadUsers: publicProcedure
+    .input(loader.getLoadArgs())
+    .query(({ ctx, input }) => {
+        return loader.loadPagination({
+            ...input,
+            ctx,
+        });
+    })
 ```
 
 You don't have to use loadPagination/load if you're using `getQuery`, and can execute the query yourself. The returned query data will still be type-safe.
 
 ```ts
-async resolve({ ctx, input }) {
+.query(({ input, ctx }) => {
     return slonik.query(loader.getQuery({
         ...input,
         ctx,
     }));
-}
+}),
 ```
 
 ### Filtering
@@ -218,7 +219,7 @@ const virtualFieldsLoader = makeQueryLoader({
 });
 ```
 
-The virtual fields can then be selected/excluded like normal fields.
+The virtual fields can then be selected like normal fields.
 
 Refer to the [playground](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc) for a more complete example.
 
@@ -247,7 +248,7 @@ yarn add slonik-trpc
 
 ## Known issues
 
-If you're passing a select/exclude array conditionally, typescript type inference doesn't allow getting the underlying type correctly. You'll have to use type assertions in that case, use `as any` if one condition has an empty array/undefined to get all the fields returned properly. Otherwise typescript will only return id/name.
+If you're passing a select array conditionally, typescript type inference doesn't allow getting the underlying type correctly. You'll have to use type assertions in that case, use `as any` if one condition has an empty array/undefined to get all the fields returned properly. Otherwise typescript will only return id/name.
 
 ```ts
 const data = await loader.load({

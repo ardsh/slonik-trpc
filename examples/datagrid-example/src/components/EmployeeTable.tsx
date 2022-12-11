@@ -121,11 +121,11 @@ export default function QuickFilteringGrid() {
         usePagination({
             pageSize: 100,
         });
-    const { data, isLoading } = trpc.employees.getPaginated.useQuery(
+    const { data, isLoading } = trpc.employees.getPrisma.useQuery(
         {
             take: pagination.pageSize,
             skip: pagination.currentPage * pagination.pageSize,
-            takeCount: true,
+            // takeCount: true,
             where: {
                 employeeName: queryOptions.filterModel.quickFilterValues || [],
                 AND: (queryOptions.filterModel.items || [])

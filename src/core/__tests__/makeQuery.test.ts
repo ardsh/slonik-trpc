@@ -695,6 +695,27 @@ describe("withQueryLoader", () => {
         expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "value" | "asdf" | undefined>();
     });
 
+    it("Doesn't allow filtering when no filters are specified", async () => {
+        const loader = makeQueryLoader({
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+        });
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse({
+            where: null,
+        });
+        expect(parser.parse({
+            where: undefined,
+        })).toEqual({
+            where: undefined,
+        });
+        expect(() => parser.parse({
+            where: {
+                id: 3,
+            },
+        })).toThrow(/received object/);
+        expectTypeOf(parsed.where).toEqualTypeOf<undefined>();
+    });
+
     it("Doesn't allow invalid types", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
@@ -731,7 +752,9 @@ describe("withQueryLoader", () => {
             orderBy: ["id", "ASC"],
             select: ["asdf", "id"],
         })).toThrowErrorMatchingSnapshot();
-        
+        expect(() => loader.getQuery({
+            orderBy: [["id", "ASC"]] as any,
+        })).toThrow(/Invalid enum value/);
     });
 
     it("Allows sorting by valid columns", async () => {
@@ -810,6 +833,43 @@ describe("withQueryLoader", () => {
         });
         expectTypeOf(parsed.orderBy?.[0]).toMatchTypeOf<["id" | "value", string] | "value" | "id" | null | undefined>();
         expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "uid" | "value" | "dummyField" | undefined>();
+    });
+
+    it("Allows disabling filters", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            sortableColumns: {
+                value: "value",
+                id: "id",
+            }
+        });
+        const parser = loader.getLoadArgs({
+            disabledFilters: {
+                OR: true,
+            }
+        });
+        const parsed = parser.parse({
+            where: {
+                OR: [{
+                    id: 2,
+                }],
+                AND: [{
+                    id: 4,
+                    OR: [{
+                        id: 3,
+                    }]
+                }]
+            },
+        });
+        expect(parsed).toEqual({
+            where: {
+                AND: [{
+                    id: 4,
+                }]
+            },
+        });
+        // @ts-expect-error OR is not defined
+        expect(parsed.where?.OR).toBeUndefined();
     });
 
     it("Allows sorting with a single column as array", async () => {
@@ -1151,7 +1211,7 @@ describe("withQueryLoader", () => {
         expect(args).toEqual(parsed);
     });
 
-    it("Reverses the order when take parameter is negative", async () => {
+    it("Reverses the order when take parameter is negative, while returning items in the original order", async () => {
         const loader = makeQueryLoader({
             db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
@@ -1175,10 +1235,10 @@ describe("withQueryLoader", () => {
         const data = await loader.loadPagination(args);
         expect(data).toEqual({
             edges: [{
-                id: 3,
+                id: 4,
                 value: "bbb",
             }, {
-                id: 4,
+                id: 3,
                 value: "bbb"
             }],
             hasNextPage: true,

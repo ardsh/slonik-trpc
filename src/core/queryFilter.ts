@@ -13,11 +13,11 @@ export type Interpretors<
     ) => SqlFragment | null | undefined | false;
 };
 
-export type RecursiveFilterConditions<TFilter> = TFilter & {
+export type RecursiveFilterConditions<TFilter, TDisabled extends "AND" | "OR" | "NOT"=never> = TFilter & Omit<{
     AND?: RecursiveFilterConditions<TFilter>[];
     OR?: RecursiveFilterConditions<TFilter>[];
     NOT?: RecursiveFilterConditions<TFilter>;
-};
+}, TDisabled>;
 
 type ZodRecursiveFilterConditions<TFilter extends Record<string, z.ZodType>> =
     TFilter & {
@@ -31,16 +31,19 @@ type ZodRecursiveFilterConditions<TFilter extends Record<string, z.ZodType>> =
     };
 
 export const recursiveFilterConditions = <
-    TFilter extends Record<string, z.ZodType>
+    TFilter extends Record<string, z.ZodType>,
 >(
-    filter: TFilter
+    filter: TFilter,
+    disabledFilters?: {
+        [x in "AND" | "OR" | "NOT"]?: boolean
+    },
 ): z.ZodObject<ZodRecursiveFilterConditions<TFilter>> => {
     const filterType: any = z.lazy(() =>
         z.object({
             ...filter,
-            OR: z.array(filterType),
-            AND: z.array(filterType),
-            NOT: filterType,
+            ...(!disabledFilters?.OR && { OR: z.array(filterType) }),
+            ...(!disabledFilters?.AND && { AND: z.array(filterType) }),
+            ...(!disabledFilters?.NOT && { NOT: filterType }),
         }).partial()
     );
     return filterType;

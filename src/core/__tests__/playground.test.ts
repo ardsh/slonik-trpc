@@ -152,4 +152,29 @@ console.log('Specific users: %O', specificUsers);
 
 console.log(gmailUsers[0].email);
 
+const postsQuery = sql.type(z.object({
+        id: z.number(),
+        author: z.string(),
+        title: z.string(),
+        date: z.string(),
+    }))`SELECT
+        posts.id,
+        users.first_name || ' ' || users.last_name AS author,
+        posts.title,
+        posts.date
+    FROM posts
+    LEFT JOIN users
+        ON users.id = posts.author_id`;
+
+const postsLoader = makeQueryLoader({
+    db,
+    query,
+    sortableColumns: {
+        name: sql.fragment`users.first_name || users.last_name`,
+        id: ["posts", "id"],
+        date: ["posts", "created_at"],
+        title: "title",
+    },
+});
+
 });

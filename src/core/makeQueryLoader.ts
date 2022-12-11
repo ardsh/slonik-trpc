@@ -1,8 +1,8 @@
 import { sql, CommonQueryMethods, QuerySqlToken, SqlFragment, FragmentSqlToken } from "slonik";
 import { z } from 'zod';
 import { notEmpty } from "../helpers/zod";
-import { RemoveAny } from '../helpers/types';
 import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, recursiveFilterConditions, ZodPartial } from "./queryFilter";
+import { debug } from '../helpers/debug';
 
 const orderDirection = z.enum(["ASC", "DESC"]);
 type OrderDirection = z.infer<typeof orderDirection>;
@@ -221,8 +221,15 @@ export function makeQueryLoader<
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
     };
+    defaults?: {
+        orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+    };
 }) {
     const query = options.query;
+    if (query.sql.includes(';')) {
+        // TODO: Add more checks for invalid queries
+        console.warn("Your query includes semicolons. Please refer to the documentation of slonik-trpc, and do not include semicolons in the query:\n " + query.sql);
+    }
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
     if (!type || !type.keyof || !type.partial) throw new Error('Invalid query type provided: ' + (type));
     type TFilter = z.infer<ZodPartial<TFilterTypes>>;
@@ -269,7 +276,7 @@ export function makeQueryLoader<
         where,
         take,
         skip,
-        orderBy,
+        orderBy=options?.defaults?.orderBy,
         ctx,
         searchAfter,
         selectGroups,
@@ -378,15 +385,20 @@ export function makeQueryLoader<
     const getLoadArgs = <
         TFields extends string = TSelectable,
         TSort extends TSortable = TSortable,
+        TFiltersDisabled extends Exclude<keyof TFilter, number | symbol> | "AND" | "OR" | "NOT" = never,
     >(
         {
             sortableColumns = Object.keys(options?.sortableColumns || {}) as never,
             selectableColumns = options?.selectableColumns as never,
+            disabledFilters,
             transformSortColumns,
         }: {
             /** You can remove specific sortable columns to disallow sorting by them */
             sortableColumns?: [TSort, ...TSort[]];
             selectableColumns?: readonly [TFields, ...TFields[]];
+            disabledFilters?: {
+                [x in TFiltersDisabled]?: boolean
+            },
             /**
              * You can enforce sorting constraints with this function.
              * E.g. ensure only certain columns are sortable, or with particular directions.
@@ -421,8 +433,8 @@ export function makeQueryLoader<
             }) : (a) => (Array.isArray(a) && (Array.isArray(a[0]) || a[0] === undefined) ? a : [a].filter(notEmpty))),
             orderUnion
         );
-        type ActualFilters = RecursiveFilterConditions<
-            z.infer<ZodPartial<TFilterTypes>>>;
+        type ActualFilters = TFilterTypes extends Record<never, any> ? never : RecursiveFilterConditions<
+            z.infer<ZodPartial<TFilterTypes>>, TFiltersDisabled>;
         return z.object({
             /** The fields that should be included. If unspecified, all fields are returned. */
             select: z.array(fields).optional(),
@@ -436,9 +448,11 @@ export function makeQueryLoader<
                 return acc;
             }, {} as {
                 [x in TSort]: z.ZodTypeAny
-            })).partial().optional() : z.undefined(),
-            orderBy: orderBy as unknown as typeof orderUnion,
-            where: options?.filters?.filters ? recursiveFilterConditions(options?.filters?.filters).nullish() as unknown as z.ZodType<ActualFilters> : z.any() as never,
+            })).partial().optional() : z.null() as never,
+            orderBy: options?.defaults?.orderBy ?
+                orderBy.default(options.defaults.orderBy) as never :
+                orderBy as unknown as typeof orderUnion,
+            where: options?.filters?.filters ? recursiveFilterConditions(options?.filters?.filters, disabledFilters).nullish() as unknown as z.ZodType<ActualFilters> : z.null() as never,
         }).partial();
     };
     const self = {
@@ -466,10 +480,12 @@ export function makeQueryLoader<
                 args.select = (args.select || []).concat(...groupFields as any[]);
             }
             const db = database || options?.db;
+            const reverse = !!args.take && args.take < 0;
             if (!db?.any) throw new Error("Database not provided");
             const finalQuery = getQuery(args);
+            debug(finalQuery.sql);
             return db.any(finalQuery).then(async rows => {
-                return mapTransformRows(rows, args.select, args.ctx);
+                return mapTransformRows(reverse ? (rows as any).reverse() as never : rows, args.select, args.ctx);
             });
         },
         /**
@@ -539,16 +555,18 @@ export function makeQueryLoader<
             // Count is null by default
             let countPromise = Promise.resolve(null as number | null);
             if (args.takeCount) {
+                debug(countQuery.sql);
                 countPromise = db
                     .any(countQuery)
                     .then((res) => res?.[0]?.count);
             }
+            debug(finalQuery.sql);
             return db
                 .any(finalQuery)
                 .then(async (edges) => {
                     const slicedEdges = edges.slice(0, args.take || undefined);
                     return {
-                        edges: await mapTransformRows(slicedEdges, args.select, args.ctx),
+                        edges: await mapTransformRows(reverse === -1 ? slicedEdges.reverse() as never : slicedEdges, args.select, args.ctx),
                         hasNextPage: edges.length > slicedEdges.length,
                         minimumCount: (args.skip || 0) + edges.length,
                         count: await countPromise.catch(err => console.error('Count query failed', err)),

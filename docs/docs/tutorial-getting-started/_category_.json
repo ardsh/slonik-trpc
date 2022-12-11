@@ -1,0 +1,8 @@
+{
+  "label": "Tutorial - Deep Dive",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Learn everything about using slonik-trpc."
+  }
+}
