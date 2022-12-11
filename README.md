@@ -26,6 +26,10 @@ const loader = makeQueryLoader({
 });
 ```
 
+### [Documentation](https://ardsh.github.io/slonik-trpc/)
+
+You can refer to [the documentation](https://ardsh.github.io/slonik-trpc/) for advanced use-cases and tutorials.
+
 ### Overfetching
 
 You can specify which fields you'd like to query, and only those will be queried, to prevent overfetching.

@@ -9,7 +9,7 @@ const config = {
   title: 'slonik-tRPC',
   tagline: 'SQL made easy',
   url: 'https://ardsh.github.io/',
-  baseUrl: '/',
+  baseUrl: '/slonik-trpc/',
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
