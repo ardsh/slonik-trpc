@@ -1,5 +1,13 @@
 # slonik-trpc
 
+## 0.6.3
+
+### Patch Changes
+
+-   289dc27: - Added option to disable recursive filters in public API
+    -   Added default orderBy
+    -   Added debugging SQL queries with DEBUG=slonik-trpc
+
 ## 0.6.1
 
 ### Patch Changes
