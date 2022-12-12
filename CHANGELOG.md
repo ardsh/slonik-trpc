@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.6.4
+
+### Patch Changes
+
+-   d8e05a6: Improved type inference
+
 ## 0.6.3
 
 ### Patch Changes
