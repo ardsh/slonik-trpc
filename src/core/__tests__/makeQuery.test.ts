@@ -1,4 +1,4 @@
-import { makeQueryLoader } from '../makeQueryLoader';
+import { makeQueryLoader, InferPayload, InferArgs } from '../makeQueryLoader';
 import { sql } from 'slonik';
 import { z } from 'zod';
 import { makeQueryTester } from './makeQueryTester';
@@ -452,6 +452,7 @@ describe("withQueryLoader", () => {
         expect(result[0].uid).toEqual(expect.any(String));
         expect(result[0].value).toEqual(expect.any(String));
         expectTypeOf(result[0]).toMatchTypeOf<{ uid: string, id: number, value: string, dummyField: any }>();
+        expectTypeOf(result[0] as InferPayload<typeof loader, any>).toMatchTypeOf<{ uid: string, id: number, value: string, dummyField: any }>();
     });
 
     it("Doesn't work well if select is conditional with empty array (needs as any assertion to select all) (BUG)", async () => {
@@ -487,6 +488,9 @@ describe("withQueryLoader", () => {
         // No need to have the type in this case
         // @ts-expect-error uid is excluded
         expect((result[0]).uid).toEqual(expect.any(String));
+        expectTypeOf(result[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            select: ["dummyField"],
+        }>>();
     });
 
     // Filters
@@ -692,7 +696,14 @@ describe("withQueryLoader", () => {
                 largeIds: true,
             },
         });
+        expectTypeOf(parsed.where).toMatchTypeOf<{ AND?: any, OR?: any, NOT?: any, id?: any, largeIds?: any } | undefined>();
         expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "value" | "asdf" | undefined>();
+
+        expectTypeOf((parsed as InferArgs<typeof loader>).select?.[0]).toEqualTypeOf<"dummyField" | "id" | undefined>();
+        expectTypeOf(parsed.where).toMatchTypeOf<InferArgs<typeof loader>["where"] | undefined>();
+        expectTypeOf(parsed.orderBy).toMatchTypeOf<InferArgs<typeof loader>["orderBy"] | undefined>();
+        expectTypeOf(parsed.searchAfter).toMatchTypeOf<InferArgs<typeof loader>["searchAfter"] | undefined>();
+        expectTypeOf(parsed.selectGroups).toMatchTypeOf<InferArgs<typeof loader>["selectGroups"] | undefined>();
     });
 
     it("Doesn't allow filtering when no filters are specified", async () => {
@@ -1028,6 +1039,10 @@ describe("withQueryLoader", () => {
         }).then(a => a[0]);
         expect(data.uid).toEqual(expect.any(String));
         expectTypeOf(data).toEqualTypeOf<{ uid: string, id: number }>();
+        expectTypeOf(data).toEqualTypeOf<InferPayload<typeof loader, {
+            select: ["uid"],
+            selectGroups: ["ids"],
+        }>>();
     });
 
     it("Allows specifying context parser", async () => {
@@ -1058,6 +1073,9 @@ describe("withQueryLoader", () => {
         }).then(a => a[0]);
         expect(data.uid).toEqual(expect.any(String));
         expectTypeOf(data).toEqualTypeOf<{ uid: string }>();
+        expectTypeOf(data).toEqualTypeOf<InferPayload<typeof loader, {
+            select: ["uid"],
+        }>>();
     });
 
     it("Passes the context and filters to filter postprocessing", async () => {
@@ -1113,6 +1131,9 @@ describe("withQueryLoader", () => {
         const data = await db.any(query);
         expectTypeOf(data[0]).toEqualTypeOf<{ id: number }>();
         expect(data).toEqual([{ id: expect.any(Number) }]);
+        expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            select: ["id"],
+        }>>();
     });
 
     it("Loads by cursor-based pagination when sorted by a single column", async () => {
@@ -1155,7 +1176,7 @@ describe("withQueryLoader", () => {
             },
             take: 1,
             orderBy: [["value", "DESC"], ["id", "DESC"]] as const
-        };
+        } as const;
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
         const data = await loader.loadPagination(parsed);
@@ -1172,6 +1193,9 @@ describe("withQueryLoader", () => {
         expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "id" < $3)`)
         expect(query.sql).toContain(`ORDER BY "value" DESC, "id" DESC`)
         expect(args).toEqual(parsed);
+        expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
+            select: ["id", "value"],
+        }>).toEqualTypeOf<{ id: number, value: string }>();
     });
 
     it("Loads cursor-based even when sorted by complex expression column", async () => {
@@ -1181,7 +1205,7 @@ describe("withQueryLoader", () => {
             sortableColumns: {
                 id: "id",
                 upperValue: sql.fragment`UPPER("value")`,
-            }
+            },
         });
         const args = {
             select: ['id', 'value'] as const,
@@ -1209,6 +1233,9 @@ describe("withQueryLoader", () => {
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
         expect(args).toEqual(parsed);
+        expectTypeOf(data.edges[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            select: ["id", "value"],
+        }>>();
     });
 
     it("Reverses the order when take parameter is negative, while returning items in the original order", async () => {
@@ -1218,7 +1245,7 @@ describe("withQueryLoader", () => {
             sortableColumns: {
                 id: "id",
                 upperValue: sql.fragment`UPPER("value")`,
-            }
+            },
         });
         const args = {
             select: ['id', 'value'] as const,
@@ -1324,6 +1351,7 @@ describe("withQueryLoader", () => {
         const query = loader.getQuery(parsed);
         expect(query.sql).toContain(`("id" IS NULL) OR (TRUE AND "value" > $1)`)
         expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
+        expectTypeOf(parsed.where).toEqualTypeOf<undefined>();
         const data = await loader.loadPagination(args);
         expect(data).toEqual({
             edges: [{
@@ -1334,6 +1362,9 @@ describe("withQueryLoader", () => {
             minimumCount: 2,
             count: expect.any(Number),
         });
+        expectTypeOf(data.edges[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            select: ["id", "value"],
+        }>>();
         expect(args).toEqual(parsed);
     });
 
@@ -1371,6 +1402,9 @@ describe("withQueryLoader", () => {
             id: expect.any(Number),
             uid: expect.any(String),
         });
+        expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            selectGroups: ["ids"],
+        }>>();
     });
 
     it("Disallows selecting non-existing groups but acts as if all were selected (BUG)", async () => {
@@ -1389,6 +1423,9 @@ describe("withQueryLoader", () => {
             value: expect.any(String),
             dummyField: expect.anything(),
         });
+        // expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
+        //     selectGroups: any
+        // }>>();
     });
 
     it("SelectGroups has priority", async () => {
@@ -1404,5 +1441,8 @@ describe("withQueryLoader", () => {
             id: expect.any(Number),
             uid: expect.any(String),
         });
+        expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            selectGroups: ["ids"],
+        }>>();
     });
 });

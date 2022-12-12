@@ -146,9 +146,9 @@ function getSelectedKeys(allKeys: string[], selected?: readonly any[], excluded?
 }
 
 export function makeQueryLoader<
-    TFilterTypes extends Record<string, z.ZodTypeAny>,
     TContextZod extends z.ZodTypeAny,
     TFragment extends SqlFragment | QuerySqlToken,
+    TFilterTypes extends Record<string, z.ZodTypeAny>=never,
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
     TVirtuals extends Record<string, any> = z.infer<TObject>,
     TSortable extends string = never,
@@ -433,7 +433,7 @@ export function makeQueryLoader<
             }) : (a) => (Array.isArray(a) && (Array.isArray(a[0]) || a[0] === undefined) ? a : [a].filter(notEmpty))),
             orderUnion
         );
-        type ActualFilters = TFilterTypes extends Record<never, any> ? never : RecursiveFilterConditions<
+        type ActualFilters = [TFilterTypes] extends [never] ? never : RecursiveFilterConditions<
             z.infer<ZodPartial<TFilterTypes>>, TFiltersDisabled>;
         return z.object({
             /** The fields that should be included. If unspecified, all fields are returned. */
@@ -583,21 +583,21 @@ export type InferPayload<
     },
     TArgs extends TLoader extends {
         loadPagination: (...args: readonly [infer A]) => any
-    } ? Omit<A, "ctx" | "orderBy" | "searchAfter" | "skip" | "take" | "takeCount" | "takeNextPages" | "where"> : never,
-    TResult = TLoader extends {
+    } ? Omit<A, "ctx" | "orderBy" | "searchAfter" | "skip" | "take" | "takeCount" | "takeNextPages" | "where"> : never = never,
+    TResult extends Record<string, any> = TLoader extends {
         load: (...args: any) => PromiseLike<ArrayLike<infer A>>
-    } ? A : any,
+    } ? A extends Record<string, any> ? A : never : any,
     TSelect extends Exclude<keyof TResult, number | symbol> = TArgs extends {
         select: ArrayLike<infer A>
     } ? A extends Exclude<keyof TResult, number | symbol> ? A : never : never,
     TGroups extends {
-        [x: string]: Exclude<keyof TResult, number | symbol>[]
+        [x: string]: ArrayLike<Exclude<keyof TResult, number | symbol>>
     } = TLoader extends {
         _columnGroups: infer A
-    } ? A extends Record<string, Exclude<keyof TResult, number | symbol>[]> ? A : never : never,
-    TGroupSelected extends Exclude<keyof TGroups, number | symbol> = TArgs extends {
+    } ? A extends { [x: string]: ArrayLike<Exclude<keyof TResult, number | symbol>> } ? A : never : never,
+    TGroupSelected extends keyof TGroups = TArgs extends {
         selectGroups: ArrayLike<infer A>
-    } ? A extends Exclude<keyof TGroups, number | symbol> ? A : never : never,
+    } ? A extends keyof TGroups ? A : never : never,
 > = Pick<
     TResult,
     [TSelect] extends [never] ?

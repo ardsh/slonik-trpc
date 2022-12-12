@@ -7,8 +7,8 @@ const FeatureList = [
     title: 'Easy to Use',
     description: (
       <>
-        Very easy to get started, without sacrificing on efficiency or flexibility.
-        Secure by default and easily extensible for advanced use cases.
+        Lightweight and intuitive, with a type-safe API that makes it very accessible.
+        It is secure by default and can be easily extended with additional functionality.
       </>
     ),
   },
@@ -22,10 +22,10 @@ const FeatureList = [
     ),
   },
   {
-    title: 'Powered by Slonik & Zod',
+    title: <>Powered by <a href="https://github.com/gajus/slonik">Slonik</a> & <a href="https://github.com/colinhacks/zod">Zod</a></>,
     description: (
       <>
-        For ultimate type-safety and composability. Unleash the power of PostgreSQL with Slonik-tRPC and Zod.
+        Experience the power of PostgreSQL with slonik and Zod, which provide ultimate composability and type-safety. Unlock the full potential of your database.
       </>
     ),
   },

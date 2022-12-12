@@ -7,7 +7,7 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'slonik-tRPC',
-  tagline: 'SQL made easy',
+  tagline: 'SQL meets typescript',
   url: 'https://ardsh.github.io/',
   baseUrl: '/slonik-trpc/',
   onBrokenLinks: 'throw',
