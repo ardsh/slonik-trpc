@@ -4,6 +4,32 @@
 
 This can make API creation very easy and flexible, especially for [tRPC](https://github.com/trpc/trpc) queries, while remaining very efficient and secure, thanks to slonik and zod.
 
+## Features
+
+- [x] Declarative filtering API (filter creation utils included!)
+  - [x] Automatic support for AND, NOT, OR in all the filters
+  - [x] Ability to add authorization filters based on user auth context.
+- [x] Selectively fetch fields, to avoid the overfetching problem.
+  - [x] Fully type-safe, only selected fields are returned in the types.
+- [x] Runtime validation of input (completely safe against unsanitized inputs).
+- [x] Virtual field declaration in typescript (fully type-safe + with async support).
+- [x] Declarative Sorting capabilities, with support for custom SQL sorting expressions
+- [x] Offset-based pagination.
+- [x] Cursor-based pagination.
+  - [x] Reverse page support
+
+## Installation
+
+### Requirements
+
+TypeScript 4.5+
+Slonik 33+
+Zod 3+
+
+```bash
+yarn add slonik-trpc
+```
+
 ## Usage
 
 Declare the query as you would normally with slonik.
@@ -227,28 +253,6 @@ The virtual fields can then be selected like normal fields.
 
 Refer to the [playground](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc) for a more complete example.
 
-## Features
-
-- [x] Declarative filtering API (filter creation utils included!)
-  - [x] Automatic support for AND, NOT, OR in all the filters
-  - [x] Ability to add authorization filters based on user auth context.
-- [x] Selecting/excluding columns, to avoid the overfetching problem.
-- [x] Runtime validation of input.
-- [x] Virtual field declaration in typescript (fully type-safe).
-- [x] Offset-based pagination.
-- [x] Cursor-based pagination.
-
-## Installation
-
-### Requirements
-
-TypeScript 4.5+
-Slonik 33+
-Zod 3+
-
-```bash
-yarn add slonik-trpc
-```
 
 ## Known issues
 
@@ -323,9 +327,20 @@ You don't need to do this if your selects are dynamic, in that case simply consi
 
 Also this is not necessary when querying the loader directly in the serverside, in those cases fields will be automatically inferred depending on your selections.
 
+There are more advanced patterns to support relay-like fragment selections, or tabular data loading that allows rendering each table column in a type-safe method.
+
 ## 🤝 Contributing
 
 Contributions, issues and feature requests are welcome!<br />Feel free to check [issues page](issues).
+
+### Testing
+
+Export your postgres database URL, then run `yarn test`
+
+```bash
+export DATABASE_URL=postgresql://postgres:password@localhost:5432/database
+yarn test
+```
 
 ### Ideas
 
@@ -337,5 +352,5 @@ Contributions, issues and feature requests are welcome!<br />Feel free to check 
 
 ## 📝 License
 
-Copyright © 2022 [ardsh](https://github.com/ardsh).<br />
+Copyright © 2023 [ardsh](https://github.com/ardsh).<br />
 This project is [MIT](LICENSE) licensed.

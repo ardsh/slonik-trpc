@@ -1,4 +1,4 @@
-import { makeQueryLoader, InferPayload, InferArgs } from '../makeQueryLoader';
+import { makeQueryLoader, InferPayload, InferSelected, InferArgs } from '../makeQueryLoader';
 import { sql } from 'slonik';
 import { z } from 'zod';
 import { makeQueryTester } from './makeQueryTester';
@@ -488,9 +488,7 @@ describe("withQueryLoader", () => {
         // No need to have the type in this case
         // @ts-expect-error uid is excluded
         expect((result[0]).uid).toEqual(expect.any(String));
-        expectTypeOf(result[0]).toEqualTypeOf<InferPayload<typeof loader, {
-            select: ["dummyField"],
-        }>>();
+        expectTypeOf(result[0]).toEqualTypeOf<InferSelected<typeof loader, "dummyField">>();
     });
 
     // Filters

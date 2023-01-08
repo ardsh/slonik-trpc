@@ -619,3 +619,21 @@ export type InferArgs<
         loadPagination: (...args: readonly [infer A]) => any
     } ? A : any,
 > = Mutable<Omit<TArgs, "ctx">>;
+
+
+export type InferSelected<
+    TLoader extends {
+        load: (...args: any) => any
+    },
+    TSelect extends InferArgs<TLoader> extends {
+        select: ArrayLike<infer A>
+    } ? A : string = never,
+    TResult extends Record<string, any> = TLoader extends {
+        load: (...args: any) => PromiseLike<ArrayLike<infer A>>
+    } ? A extends Record<string, any> ? A : never : any,
+> = Pick<
+    TResult,
+    [TSelect] extends [never] ?
+        keyof TResult :
+    TSelect extends Exclude<keyof TResult, number | symbol> ? (TSelect) : keyof TResult
+>;
