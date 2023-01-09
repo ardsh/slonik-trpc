@@ -6,16 +6,16 @@ This can make API creation very easy and flexible, especially for [tRPC](https:/
 
 ## Features
 
-- [x] Declarative filtering API (filter creation utils included!)
-  - [x] Automatic support for AND, NOT, OR in all the filters
-  - [x] Ability to add authorization filters based on user auth context.
-- [x] Selectively fetch fields, to avoid the overfetching problem.
+- [x] Declarative [filtering API](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/filtering) (filter creation utils included!)
+  - [x] Automatic support for `AND`, `NOT`, `OR` in all the filters
+  - [x] Ability to add [authorization filters](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/authorization) based on user auth context.
+- [x] [Select the fields](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/overfetching) you need, to avoid the overfetching problem.
   - [x] Fully type-safe, only selected fields are returned in the types.
 - [x] Runtime validation of input (completely safe against unsanitized inputs).
-- [x] Virtual field declaration in typescript (fully type-safe + with async support).
-- [x] Declarative Sorting capabilities, with support for custom SQL sorting expressions
-- [x] Offset-based pagination.
-- [x] Cursor-based pagination.
+- [x] [Virtual field](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/virtual-columns) declaration in typescript (fully type-safe + with async support).
+- [x] [Declarative sorting](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/sorting) capabilities, with support for custom SQL sorting expressions
+- [x] [Offset-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/pagination).
+- [x] [Cursor-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/cursor-pagination).
   - [x] Reverse page support
 
 ## Installation

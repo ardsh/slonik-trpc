@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { notEmpty } from "../helpers/zod";
 import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, recursiveFilterConditions, ZodPartial } from "./queryFilter";
 import { debug } from '../helpers/debug';
+import { fromCursor, toCursor } from "../helpers/cursors";
 
 const orderDirection = z.enum(["ASC", "DESC"]);
 type OrderDirection = z.infer<typeof orderDirection>;
@@ -36,6 +37,7 @@ type LoadParameters<
     TSelect extends keyof TObject,
     TSortable extends string = never,
     TGroupSelectable extends string = never,
+    TTakeCursors extends boolean = never,
 > = {
     /** The fields that should be included. If `select` and `selectGroups` are unspecified, all fields are returned. */
     select?: readonly TSelect[];
@@ -61,7 +63,7 @@ type LoadParameters<
     skip?: number;
     /**
      * Cursor-based pagination requires you to sort by a sequential, unique column such as an ID or a timestamp.
-     * Use this parameter to pass the current item sortable values, after which you'd like to load.
+     * You can use this or `cursor` to pass the current item sortable values, after which you'd like to load.
      * E.g.
      * ```ts
      * searchAfter: {
@@ -77,10 +79,24 @@ type LoadParameters<
      * },
      * orderBy: [["createdAt", "DESC"], ["id", "ASC"]]
      * ```
+     * searchAfter parameters will take precedence over `cursor`, if both are specified.
+     * However this should be avoided, only use searchAfter if you'd like finer control over cursor-based pagination,
+     * as it's generally harder to use than cursor.
      * */
     searchAfter?: {
         [x in TSortable]?: string | number | boolean | null
     },
+    /**
+     * If you specify the cursor string, it will act like an opaque searchAfter for searching after items.
+     * Use in conjunction with takeCursors: true if you want an opaque implementation of cursor-based pagination.
+     * Very useful especially if you have complex sorting requirements that don't match the returned fields.
+     * Get the cursor from startCursor or endCursor from the loadPagination result, then use a positive or negative take.
+     * */
+    cursor?: string,
+    /**
+     * If specified true, a startCursor and endCursor is returned with loadPagination.
+     * */
+    takeCursors?: TTakeCursors,
     /** The `columnGroups` you want to select.
      * If `selectGroups` and `select` are unspecified, all columns will be selected.
      * If specified, will select the columns in that group.
@@ -120,7 +136,10 @@ export type ResultType<
     TVirtuals extends Record<string, any>,
     TGroupSelected extends keyof (TVirtuals & z.infer<TObject>),
     TSelect extends keyof (TVirtuals & z.infer<TObject>),
-> = Pick<
+    TTakeCursors extends boolean = never,
+> = ([TTakeCursors] extends [never] ? Record<never, never> : {
+    cursor: string,
+}) & Pick<
         TVirtuals & Omit<z.infer<TObject>, keyof TVirtuals>, // Virtual fields can overwrite real fields
         [TSelect] extends [never] ?
             [TGroupSelected] extends [never] ?
@@ -267,17 +286,32 @@ export function makeQueryLoader<
                 }));
             }
         }
+        if (options.sortableColumns) {
+            return rows.map(row => {
+                if (row["cursorcolumns"]) {
+                    const { cursorcolumns, ...rest } = row;
+                    return {
+                        ...rest as typeof row,
+                        cursor: rest.cursor ? rest.cursor : toCursor(cursorcolumns),
+                    };
+                }
+                return row;
+            });
+        }
         return rows;
     }
     const getQuery = <
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
         TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
+        TTakeCursors extends boolean = never,
     >({
         where,
         take,
         skip,
         orderBy=options?.defaults?.orderBy,
         ctx,
+        cursor,
+        takeCursors,
         searchAfter,
         selectGroups,
         select,
@@ -287,7 +321,8 @@ export function makeQueryLoader<
         TVirtuals & z.infer<TObject>,
         (TSelect) & TSelectable,
         TSortable,
-        TGroupSelected
+        TGroupSelected,
+        TTakeCursors
     >) => {
         const whereCondition = interpretFilters?.(where || ({} as any), ctx ? options.contextParser?.parse(ctx) ?? ctx : ctx);
         if (selectGroups?.length) {
@@ -300,14 +335,42 @@ export function makeQueryLoader<
         if (reverse && !orderBy?.length) {
             throw new Error("orderBy must be specified when take parameter is negative!");
         }
-        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect>>
-            = (isPartial ? type.partial() : type) as any;
         const noneSelected = !select?.length;
         const orderExpressions = Array.isArray(orderBy?.[0]) ? orderBy?.map(order => orderByWithoutTransform.parse(order)) :
             orderBy?.length ? [orderByWithoutTransform.parse(orderBy)] : null;
         const conditions = [whereCondition].filter(notEmpty);
-        if (searchAfter && orderExpressions?.length) {
+        const cursorsEnabled = takeCursors && orderExpressions?.length;
+        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect, TTakeCursors>>
+            = cursorsEnabled ? (isPartial ? type.partial() : type).merge(z.object({
+                cursorcolumns: z.any(),
+            })) : (isPartial ? type.partial() : type) as any;
+        const fields = Object.keys(type?.keyof?.()?.Values || {}) as any[];
+        const selectable = options?.selectableColumns;
+        select = (select || [])
+            .filter(field => !selectable?.length || selectable.indexOf(field) >= 0)
+            // Add dependencies from selected fields.
+            .flatMap((field) => [
+                field,
+                ...((options?.virtualFields?.[field]?.dependencies as any[]) || []),
+            ])
+            .filter((field) => !fields?.length || fields?.indexOf(field) >= 0);
+        const finalKeys = Array.from(new Set(fields
+            .filter(notEmpty)
+            .filter((column) => noneSelected || select?.includes(column as any))
+        ).values()).map(a => sql.identifier([a])) as any[];
+        if (takeCursors && orderExpressions?.length) {
+            finalKeys.push(sql.fragment`json_build_array(${
+                orderExpressions.length
+                  ? sql.join(
+                      orderExpressions.map((expression) => interpretFieldFragment(orderByType.parse(expression)[0])),
+                      sql.fragment`,`
+                    )
+                  : sql.fragment``
+              }) cursorcolumns`);
+        }
+        if ((searchAfter || cursor) && orderExpressions?.length) {
             const orderByExpressions = orderExpressions.map(parsed => [interpretFieldFragment(orderByType.parse(parsed)[0]), parsed[1], parsed[0]] as const);
+            const cursorValues = cursor ? fromCursor(cursor) : [];
             conditions.push(
                 sql.fragment`(${sql.join(
                 orderByExpressions.map((_, outerIndex) => {
@@ -320,7 +383,7 @@ export function makeQueryLoader<
                     expressions.map(([expression, direction, columnAlias], innerIndex) => {
                         let operator = sql.fragment`=`;
                         let nullFragment = sql.fragment`TRUE`;
-                        const value = searchAfter[columnAlias];
+                        const value = searchAfter ? searchAfter[columnAlias] : cursorValues[innerIndex];
                         if (innerIndex === expressions.length - 1) {
                             operator = direction === (reverse ? "DESC" : "ASC")
                                 ? sql.fragment`>` : sql.fragment`<`;
@@ -342,30 +405,16 @@ export function makeQueryLoader<
         ${typeof take === 'number' ? sql.fragment`LIMIT ${take}` : sql.fragment``}
         ${typeof skip === 'number' ? sql.fragment`OFFSET ${skip}` : sql.fragment``}
         `;
-        const fields = Object.keys(type?.keyof?.()?.Values || {}) as any[];
-        const selectable = options?.selectableColumns;
-        select = (select || [])
-            .filter(field => !selectable?.length || selectable.indexOf(field) >= 0)
-            // Add dependencies from selected fields.
-            .flatMap((field) => [
-                field,
-                ...((options?.virtualFields?.[field]?.dependencies as any[]) || []),
-            ])
-            .filter((field) => !fields?.length || fields?.indexOf(field) >= 0);
-        const finalKeys = Array.from(new Set(fields
-            .filter(notEmpty)
-            .filter((column) => noneSelected || select?.includes(column as any))
-        ).values());
+        if (!select?.length && !selectGroups?.length) {
+            finalKeys.push(sql.fragment`*`);
+        }
 
         // Run another root query, that only selects the column names that aren't excluded, or only ones that are included.
-        const finalQuery =
-            select?.length || selectGroups?.length
-                ? sql.type(zodType)`WITH root_query AS (${baseQuery})
+        const finalQuery = sql.type(zodType)`WITH root_query AS (${baseQuery})
             SELECT ${sql.join(
-                finalKeys.map((a) => sql.identifier([a])),
+                finalKeys,
                 sql.fragment`, `
-            )} FROM root_query`
-                : baseQuery;
+            )} FROM root_query`;
         return finalQuery;
     };
     const getSelectableFields = () => {
@@ -441,6 +490,8 @@ export function makeQueryLoader<
             take: z.number().optional(),
             skip: z.number().optional().default(0),
             takeCount: z.boolean().optional(),
+            takeCursors: z.boolean().optional(),
+            cursor: z.string().optional(),
             takeNextPages: z.number().optional(),
             selectGroups: z.array(groupsEnum).optional(),
             searchAfter: sortableColumns.length ? z.object(sortableColumns.reduce((acc, column) => {
@@ -464,6 +515,7 @@ export function makeQueryLoader<
         async load<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
+            TTakeCursors extends boolean = never,
         >(
             args: LoadParameters<
                 TFilter,
@@ -471,7 +523,8 @@ export function makeQueryLoader<
                 TVirtuals & z.infer<TObject>,
                 (TSelect) & TSelectable,
                 TSortable,
-                TGroupSelected
+                TGroupSelected,
+                TTakeCursors
             >, database?: Pick<CommonQueryMethods, "any">
         ) {
             // TODO: Remove this
@@ -497,6 +550,7 @@ export function makeQueryLoader<
         async loadPagination<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
+            TTakeCursors extends boolean = never,
         >(
             args: LoadParameters<
                 TFilter,
@@ -504,7 +558,8 @@ export function makeQueryLoader<
                 TVirtuals & z.infer<TObject>,
                 (TSelect) & TSelectable,
                 TSortable,
-                TGroupSelected
+                TGroupSelected,
+                TTakeCursors
             > & {
                 /**
                  * If true, a count query is called to fetch all the rows as if no `take` limit had been specified.
@@ -534,17 +589,17 @@ export function makeQueryLoader<
             const db = database || options?.db;
             if (!db?.any) throw new Error("Database not provided");
             const reverse = !!args.take && args.take < 0 ? -1 : 1;
-            if (typeof args.take === 'number' && args.take < 0) args.take = -args.take;
+            const take = (typeof args.take === 'number' && args.take < 0) ? -args.take : args.take;
             if (reverse === -1 && !args.orderBy?.length) {
                 throw new Error("orderBy must be specified when take parameter is negative!");
             }
-            const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (args?.take || 25) + 1;
+            const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (take || 25) + 1;
             const finalQuery = getQuery({
                 ...args,
                 take:
-                    typeof args.take === 'number'
+                    typeof take === 'number'
                         ? // Query an extra row to see if the next page exists
-                          (Math.min(Math.max(0, args.take), 1000) + extraItems) * reverse
+                          (Math.min(Math.max(0, take), 1000) + extraItems) * reverse
                         : undefined,
             });
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
@@ -564,11 +619,19 @@ export function makeQueryLoader<
             return db
                 .any(finalQuery)
                 .then(async (edges) => {
-                    const slicedEdges = edges.slice(0, args.take || undefined);
+                    const slicedEdges = edges.slice(0, take || undefined);
+                    const cursors = args.takeCursors && {
+                        startCursor: toCursor((slicedEdges[0] as any)?.["cursorcolumns"]),
+                        endCursor: toCursor((slicedEdges[slicedEdges.length - 1] as any)?.["cursorcolumns"]),
+                    };
                     return {
                         edges: await mapTransformRows(reverse === -1 ? slicedEdges.reverse() as never : slicedEdges, args.select, args.ctx),
                         hasNextPage: edges.length > slicedEdges.length,
                         minimumCount: (args.skip || 0) + edges.length,
+                        ...(reverse === -1 && cursors ? {
+                            startCursor: cursors.endCursor,
+                            endCursor: cursors.startCursor,
+                        } : cursors),
                         count: await countPromise.catch(err => console.error('Count query failed', err)),
                     };
                 });
@@ -583,7 +646,7 @@ export type InferPayload<
     },
     TArgs extends TLoader extends {
         loadPagination: (...args: readonly [infer A]) => any
-    } ? Omit<A, "ctx" | "orderBy" | "searchAfter" | "skip" | "take" | "takeCount" | "takeNextPages" | "where"> : never = never,
+    } ? Omit<A, "ctx" | "orderBy" | "searchAfter" | "skip" | "take" | "takeCount" | "takeNextPages" | "where" | "cursor"> : never = never,
     TResult extends Record<string, any> = TLoader extends {
         load: (...args: any) => PromiseLike<ArrayLike<infer A>>
     } ? A extends Record<string, any> ? A : never : any,
@@ -598,7 +661,12 @@ export type InferPayload<
     TGroupSelected extends keyof TGroups = TArgs extends {
         selectGroups: ArrayLike<infer A>
     } ? A extends keyof TGroups ? A : never : never,
-> = Pick<
+    TTakeCursors extends boolean = TArgs extends {
+        takeCursors: infer A
+    } ? A extends boolean ? A : never : never,
+> = ([TTakeCursors] extends [never] ? Record<never, never> : {
+    cursor: string
+}) & Pick<
     TResult,
     [TSelect] extends [never] ?
         [TGroupSelected] extends [never] ?
@@ -620,20 +688,3 @@ export type InferArgs<
     } ? A : any,
 > = Mutable<Omit<TArgs, "ctx">>;
 
-
-export type InferSelected<
-    TLoader extends {
-        load: (...args: any) => any
-    },
-    TSelect extends InferArgs<TLoader> extends {
-        select: ArrayLike<infer A>
-    } ? A : string = never,
-    TResult extends Record<string, any> = TLoader extends {
-        load: (...args: any) => PromiseLike<ArrayLike<infer A>>
-    } ? A extends Record<string, any> ? A : never : any,
-> = Pick<
-    TResult,
-    [TSelect] extends [never] ?
-        keyof TResult :
-    TSelect extends Exclude<keyof TResult, number | symbol> ? (TSelect) : keyof TResult
->;

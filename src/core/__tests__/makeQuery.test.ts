@@ -1,4 +1,4 @@
-import { makeQueryLoader, InferPayload, InferSelected, InferArgs } from '../makeQueryLoader';
+import { makeQueryLoader, InferPayload, InferArgs } from '../makeQueryLoader';
 import { sql } from 'slonik';
 import { z } from 'zod';
 import { makeQueryTester } from './makeQueryTester';
@@ -488,7 +488,9 @@ describe("withQueryLoader", () => {
         // No need to have the type in this case
         // @ts-expect-error uid is excluded
         expect((result[0]).uid).toEqual(expect.any(String));
-        expectTypeOf(result[0]).toEqualTypeOf<InferSelected<typeof loader, "dummyField">>();
+        expectTypeOf(result[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            select: ["dummyField"],
+        }>>();
     });
 
     // Filters
@@ -1442,5 +1444,144 @@ describe("withQueryLoader", () => {
         expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
             selectGroups: ["ids"],
         }>>();
+    });
+
+    // Cursor base64 API
+    it("Returns cursors for each item", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            sortableColumns: {
+                id: "id",
+            }
+        });
+        const take = 5;
+        const skip = 2;
+        const query = await loader.loadPagination({
+            select: ['value'],
+            skip,
+            takeCursors: true,
+            orderBy: ["id", "ASC"],
+            take
+        });
+        expect(query.startCursor).toEqual(expect.any(String));
+        expect(query.endCursor).toEqual(expect.any(String));
+        expect(query.edges).toEqual(query.edges.map(i => ({
+            value: expect.any(String),
+            cursor: expect.any(String),
+        })));
+    });
+
+    it("Returns items after cursor", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                value: sql.fragment`"value"`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            takeCursors: true,
+            cursor: "WyJhYWEiLDJd",
+            take: 1,
+            orderBy: [["value", "DESC"], ["id", "DESC"]] as const
+        } as const;
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        const data = await loader.loadPagination(parsed);
+        const query = loader.getQuery(args);
+        const endCursor = data.endCursor;
+        expect(data).toEqual({
+            edges: [{
+                cursor: expect.any(String),
+                id: 1,
+                value: "aaa",
+            }],
+            hasNextPage: false,
+            minimumCount: 1,
+            count: null,
+            startCursor: endCursor,
+            endCursor,
+        });
+
+        expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "id" < $3)`)
+        expect(query.sql).toContain(`ORDER BY "value" DESC, "id" DESC`)
+        expect(args).toEqual(parsed);
+        expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
+            select: ["id", "value"],
+            takeCursors: true,
+        }>).toEqualTypeOf<{ id: number, value: string, cursor: string }>();
+    });
+
+    it("Cursor works with negative take", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                value: sql.fragment`"value"`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            takeCursors: true,
+            cursor: "WyJhYWEiLDJd",
+            take: -2,
+            orderBy: [["value", "DESC"], ["id", "DESC"]] as const
+        } as const;
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        const data = await loader.loadPagination(parsed);
+        const query = loader.getQuery(args);
+        const startCursor = data.edges[0].cursor;
+        expect(data).toEqual({
+            edges: [{
+                cursor: expect.any(String),
+                id: 4,
+                value: "bbb",
+            }, {
+                cursor: expect.any(String),
+                id: 3,
+                value: "bbb",
+            }],
+            hasNextPage: true,
+            minimumCount: 3,
+            count: null,
+            startCursor: startCursor,
+            endCursor: expect.any(String),
+        });
+
+        expect(query.sql).toContain(`("value" > $1) OR ("value" = $2 AND "id" > $3)`)
+        expect(query.sql).toContain(`ORDER BY "value" ASC, "id" ASC`)
+        expect(args).toEqual(parsed);
+        expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
+            select: ["id", "value"],
+            takeCursors: true,
+        }>).toEqualTypeOf<{ id: number, value: string, cursor: string }>();
+    });
+
+    it("Throws an error with invalid cursors", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            sortableColumns: {
+                id: "id",
+                value: sql.fragment`"value"`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            takeCursors: true,
+            cursor: "blablabla",
+            take: 1,
+            orderBy: [["value", "DESC"], ["id", "DESC"]] as const
+        } as const;
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        // eslint-disable-next-line
+        expect(loader.loadPagination(parsed)).rejects.toThrow(/Unexpected token/);
+
+        expect(args).toEqual(parsed);
     });
 });
