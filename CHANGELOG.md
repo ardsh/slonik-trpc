@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.7.0
+
+### Minor Changes
+
+-   8d0a58f: Added base64 opaque cursors
+
 ## 0.6.4
 
 ### Patch Changes
