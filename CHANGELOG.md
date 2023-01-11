@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.7.1
+
+### Patch Changes
+
+-   084d970: Fixed cursor pagination query
+
 ## 0.7.0
 
 ### Minor Changes
