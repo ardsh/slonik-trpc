@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { makeQueryTester } from './makeQueryTester';
 
 import { createFilters, makeFilter } from '../queryFilter';
+import { createGroupSelector } from '../selectGroups';
 import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } from '../../helpers/sqlUtils';
 import { expectTypeOf } from 'expect-type';
 import { createOptions } from '../../index';
@@ -1174,6 +1175,7 @@ describe("withQueryLoader", () => {
                 id: 2,
                 value: "aaa",
             },
+            takeCount: true,
             take: 1,
             orderBy: [["value", "DESC"], ["id", "DESC"]] as const
         } as const;
@@ -1186,9 +1188,10 @@ describe("withQueryLoader", () => {
                 id: 1,
                 value: "aaa",
             }],
+            hasPreviousPage: true,
             hasNextPage: false,
             minimumCount: 1,
-            count: null,
+            count: 9,
         });
         expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "id" < $3)`)
         expect(query.sql).toContain(`ORDER BY "value" DESC, "id" DESC`)
@@ -1201,7 +1204,7 @@ describe("withQueryLoader", () => {
     it("Loads cursor-based even when sorted by complex expression column", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: sql.type(zodType)`SELECT id, uid, value FROM test_table_bar`,
             sortableColumns: {
                 id: "id",
                 upperValue: sql.fragment`UPPER("value")`,
@@ -1226,6 +1229,7 @@ describe("withQueryLoader", () => {
                 id: 1,
                 value: "aaa",
             }],
+            hasPreviousPage: true,
             hasNextPage: false,
             minimumCount: 1,
             count: null,
@@ -1244,7 +1248,7 @@ describe("withQueryLoader", () => {
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
             sortableColumns: {
                 id: "id",
-                upperValue: sql.fragment`UPPER("value")`,
+                upperValue: sql.fragment`UPPER(test_table_bar."value")`,
             },
         });
         const args = {
@@ -1257,8 +1261,8 @@ describe("withQueryLoader", () => {
             orderBy: [["upperValue", "DESC"], ["id", "DESC"]] as const
         };
         const query = loader.getQuery(args);
-        expect(query.sql).toContain(`(UPPER("value") > $1) OR (UPPER("value") = $2 AND "id" > $3)`)
-        expect(query.sql).toContain(`ORDER BY UPPER("value") ASC, "id" ASC`)
+        expect(query.sql).toContain(`(UPPER(test_table_bar."value") > $1) OR (UPPER(test_table_bar."value") = $2 AND "id" > $3)`)
+        expect(query.sql).toContain(`ORDER BY UPPER(test_table_bar."value") ASC, "id" ASC`)
         const data = await loader.loadPagination(args);
         expect(data).toEqual({
             edges: [{
@@ -1268,6 +1272,7 @@ describe("withQueryLoader", () => {
                 id: 3,
                 value: "bbb"
             }],
+            hasPreviousPage: true,
             hasNextPage: true,
             minimumCount: 3,
             count: null,
@@ -1317,6 +1322,7 @@ describe("withQueryLoader", () => {
                 id: 3,
                 value: "bbb"
             }],
+            hasPreviousPage: true,
             hasNextPage: true,
             minimumCount: 2,
             count: null,
@@ -1358,6 +1364,7 @@ describe("withQueryLoader", () => {
                 id: 5,
                 value: "ccc"
             }],
+            hasPreviousPage: true,
             hasNextPage: true,
             minimumCount: 2,
             count: expect.any(Number),
@@ -1476,6 +1483,50 @@ describe("withQueryLoader", () => {
             db,
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
             sortableColumns: {
+                id: ["test_table_bar", "id"],
+                value: sql.fragment`"value"`,
+            }
+        });
+        const args = {
+            select: ['id', 'value'] as const,
+            takeCursors: true,
+            cursor: "WyJhYWEiLDJd",
+            take: 1,
+            orderBy: [["value", "DESC"], ["id", "DESC"]] as const
+        } as const;
+        const parser = loader.getLoadArgs();
+        const parsed = parser.parse(args);
+        const data = await loader.loadPagination(parsed);
+        const query = loader.getQuery(args);
+        const endCursor = data.endCursor;
+        expect(data).toEqual({
+            edges: [{
+                cursor: expect.any(String),
+                id: 1,
+                value: "aaa",
+            }],
+            hasPreviousPage: true,
+            hasNextPage: false,
+            minimumCount: 1,
+            count: null,
+            startCursor: endCursor,
+            endCursor,
+        });
+
+        expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "test_table_bar"."id" < $3)`)
+        expect(query.sql).toContain(`ORDER BY "value" DESC, "test_table_bar"."id" DESC`)
+        expect(args).toEqual(parsed);
+        expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
+            select: ["id", "value"],
+            takeCursors: true,
+        }>).toEqualTypeOf<{ id: number, value: string, cursor?: string }>();
+    });
+
+    it("Can access internal columns for determining the cursor", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(zodType)`SELECT test_table_bar.id, test_table_bar.uid, test_table_bar.value FROM test_table_bar`,
+            sortableColumns: {
                 id: "id",
                 value: sql.fragment`"value"`,
             }
@@ -1498,6 +1549,7 @@ describe("withQueryLoader", () => {
                 id: 1,
                 value: "aaa",
             }],
+            hasPreviousPage: true,
             hasNextPage: false,
             minimumCount: 1,
             count: null,
@@ -1511,7 +1563,7 @@ describe("withQueryLoader", () => {
         expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
             select: ["id", "value"],
             takeCursors: true,
-        }>).toEqualTypeOf<{ id: number, value: string, cursor: string }>();
+        }>).toEqualTypeOf<{ id: number, value: string, cursor?: string }>();
     });
 
     it("Cursor works with negative take", async () => {
@@ -1520,19 +1572,23 @@ describe("withQueryLoader", () => {
             query: sql.type(zodType)`SELECT * FROM test_table_bar`,
             sortableColumns: {
                 id: "id",
-                value: sql.fragment`"value"`,
+                value: sql.fragment`test_table_bar."value"`,
             }
         });
         const args = {
             select: ['id', 'value'] as const,
             takeCursors: true,
             cursor: "WyJhYWEiLDJd",
+            takeCount: true,
             take: -2,
             orderBy: [["value", "DESC"], ["id", "DESC"]] as const
         } as const;
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
-        const data = await loader.loadPagination(parsed);
+        const data = await loader.loadPagination({
+            ...parsed,
+            takeCursors: true,
+        });
         const query = loader.getQuery(args);
         const startCursor = data.edges[0].cursor;
         expect(data).toEqual({
@@ -1545,20 +1601,21 @@ describe("withQueryLoader", () => {
                 id: 3,
                 value: "bbb",
             }],
+            hasPreviousPage: true,
             hasNextPage: true,
             minimumCount: 3,
-            count: null,
+            count: 9,
             startCursor: startCursor,
             endCursor: expect.any(String),
         });
 
-        expect(query.sql).toContain(`("value" > $1) OR ("value" = $2 AND "id" > $3)`)
-        expect(query.sql).toContain(`ORDER BY "value" ASC, "id" ASC`)
+        expect(query.sql).toContain(`(test_table_bar."value" > $1) OR (test_table_bar."value" = $2 AND "id" > $3)`)
+        expect(query.sql).toContain(`ORDER BY test_table_bar."value" ASC, "id" ASC`)
         expect(args).toEqual(parsed);
         expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
             select: ["id", "value"],
             takeCursors: true,
-        }>).toEqualTypeOf<{ id: number, value: string, cursor: string }>();
+        }>).toEqualTypeOf<{ id: number, value: string, cursor?: string }>();
     });
 
     it("Throws an error with invalid cursors", async () => {
@@ -1583,5 +1640,81 @@ describe("withQueryLoader", () => {
         expect(loader.loadPagination(parsed)).rejects.toThrow(/Unexpected token/);
 
         expect(args).toEqual(parsed);
+    });
+
+    // createGroupSelect
+
+    it("createGroupSelector should save the type of a selected group", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const selector = createGroupSelector<typeof loader>();
+        const a = selector(["id", "uid"]);
+
+        const data = await loader.load({
+            take: 1,
+            select: [
+                ...a.select
+            ],
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string }>();
+        expect(data[0]).toEqual({
+            id: expect.any(Number),
+            uid: expect.any(String),
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            select: typeof a.select,
+        }>>();
+    });
+
+    it("createGroupSelector should save the type of multiple selected group", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const selector = createGroupSelector<typeof loader>();
+        const a = selector(["id", "uid"]);
+        const b = selector(["value", "id"]);
+
+        const data = await loader.load({
+            take: 1,
+            select: [
+                ...a.select,
+                ...b.select,
+            ],
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, value: string }>();
+        expect(data[0]).toEqual({
+            id: expect.any(Number),
+            uid: expect.any(String),
+            value: expect.any(String),
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            select: typeof a.select | typeof b.select,
+        }>>();
+    });
+
+    it("createGroupSelector works with manual selections", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+        });
+        const selector = createGroupSelector<typeof loader>();
+        const a = selector(["id", "uid"]);
+
+        const data = await loader.load({
+            take: 1,
+            select: [
+                "value",
+                ...a.select,
+            ],
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<{ id: number, uid: string, value: string }>();
+        expect(data[0]).toEqual({
+            id: expect.any(Number),
+            uid: expect.any(String),
+            value: expect.any(String),
+        });
+        expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
+            select: typeof a.select | ["value"],
+        }>>();
     });
 });

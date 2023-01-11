@@ -37,7 +37,7 @@ type LoadParameters<
     TSelect extends keyof TObject,
     TSortable extends string = never,
     TGroupSelectable extends string = never,
-    TTakeCursors extends boolean = never,
+    TTakeCursors extends boolean = false,
 > = {
     /** The fields that should be included. If `select` and `selectGroups` are unspecified, all fields are returned. */
     select?: readonly TSelect[];
@@ -136,10 +136,10 @@ export type ResultType<
     TVirtuals extends Record<string, any>,
     TGroupSelected extends keyof (TVirtuals & z.infer<TObject>),
     TSelect extends keyof (TVirtuals & z.infer<TObject>),
-    TTakeCursors extends boolean = never,
-> = ([TTakeCursors] extends [never] ? Record<never, never> : {
-    cursor: string,
-}) & Pick<
+    TTakeCursors extends boolean = false,
+> = ([TTakeCursors] extends [true] ? {
+    cursor?: string
+} : Record<never, never>) & Pick<
         TVirtuals & Omit<z.infer<TObject>, keyof TVirtuals>, // Virtual fields can overwrite real fields
         [TSelect] extends [never] ?
             [TGroupSelected] extends [never] ?
@@ -303,7 +303,7 @@ export function makeQueryLoader<
     const getQuery = <
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
         TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
-        TTakeCursors extends boolean = never,
+        TTakeCursors extends boolean = false,
     >({
         where,
         take,
@@ -325,6 +325,7 @@ export function makeQueryLoader<
         TTakeCursors
     >) => {
         const whereCondition = interpretFilters?.(where || ({} as any), ctx ? options.contextParser?.parse(ctx) ?? ctx : ctx);
+        let actualQuery = query;
         if (selectGroups?.length) {
             const groupFields = selectGroups.flatMap(group => options.columnGroups?.[group] || []);
             select = (select || []).concat(...groupFields as any[]);
@@ -358,15 +359,23 @@ export function makeQueryLoader<
             .filter(notEmpty)
             .filter((column) => noneSelected || select?.includes(column as any))
         ).values()).map(a => sql.identifier([a])) as any[];
+        const lateralExpressions = [];
         if (takeCursors && orderExpressions?.length) {
-            finalKeys.push(sql.fragment`json_build_array(${
+            if (!query.sql.includes("lateralcolumns.cursorjson")) {
+                // Hacky way to get access to internal FROM tables for sorting expressions...
+                actualQuery = {
+                    ...query,
+                    sql: query.sql.replace(/^\n*(\W\n?)*SELECT/i, "SELECT lateralcolumns.cursorjson cursorcolumns, "),
+                }
+            }
+            lateralExpressions.push(sql.fragment`json_build_array(${
                 orderExpressions.length
                   ? sql.join(
                       orderExpressions.map((expression) => interpretFieldFragment(orderByType.parse(expression)[0])),
                       sql.fragment`,`
                     )
                   : sql.fragment``
-              }) cursorcolumns`);
+              }) cursorjson`);
         }
         if ((searchAfter || cursor) && orderExpressions?.length) {
             const orderByExpressions = orderExpressions.map(parsed => [interpretFieldFragment(orderByType.parse(parsed)[0]), parsed[1], parsed[0]] as const);
@@ -399,7 +408,7 @@ export function makeQueryLoader<
                 )})`
             );
         }
-        const baseQuery = sql.type(zodType)`${query}
+        const baseQuery = sql.type(zodType)`${actualQuery} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
         ${conditions.length ? sql.fragment`WHERE (${sql.join(conditions, sql.fragment`) AND (`)})` : sql.fragment``}
         ${orderExpressions ? sql.fragment`ORDER BY ${sql.join(orderExpressions.map(parsed => interpretOrderBy(orderByType.parse(parsed), reverse)), sql.fragment`, `)}` : sql.fragment``}
         ${typeof take === 'number' ? sql.fragment`LIMIT ${take}` : sql.fragment``}
@@ -407,6 +416,9 @@ export function makeQueryLoader<
         `;
         if (!select?.length && !selectGroups?.length) {
             finalKeys.push(sql.fragment`*`);
+        }
+        if (takeCursors && lateralExpressions?.length) {
+            finalKeys.push(sql.fragment`root_query.cursorcolumns`);
         }
 
         // Run another root query, that only selects the column names that aren't excluded, or only ones that are included.
@@ -515,7 +527,7 @@ export function makeQueryLoader<
         async load<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
-            TTakeCursors extends boolean = never,
+            TTakeCursors extends boolean = false,
         >(
             args: LoadParameters<
                 TFilter,
@@ -550,7 +562,7 @@ export function makeQueryLoader<
         async loadPagination<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
-            TTakeCursors extends boolean = never,
+            TTakeCursors extends boolean = false,
         >(
             args: LoadParameters<
                 TFilter,
@@ -605,6 +617,9 @@ export function makeQueryLoader<
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
                 ...args,
                 skip: undefined,
+                searchAfter: undefined,
+                cursor: undefined,
+                takeCursors: false,
                 take: undefined,
             })}) allrows`;
             // Count is null by default
@@ -624,9 +639,12 @@ export function makeQueryLoader<
                         startCursor: toCursor((slicedEdges[0] as any)?.["cursorcolumns"]),
                         endCursor: toCursor((slicedEdges[slicedEdges.length - 1] as any)?.["cursorcolumns"]),
                     };
+                    const hasMore = edges.length > slicedEdges.length;
+                    const hasPrevious = !!args.skip || (!!args.cursor || !!args.searchAfter);
                     return {
                         edges: await mapTransformRows(reverse === -1 ? slicedEdges.reverse() as never : slicedEdges, args.select, args.ctx),
-                        hasNextPage: edges.length > slicedEdges.length,
+                        hasPreviousPage: reverse === -1 ? hasMore : hasPrevious,
+                        hasNextPage: reverse === -1 ? hasPrevious : hasMore,
                         minimumCount: (args.skip || 0) + edges.length,
                         ...(reverse === -1 && cursors ? {
                             startCursor: cursors.endCursor,
@@ -662,11 +680,11 @@ export type InferPayload<
         selectGroups: ArrayLike<infer A>
     } ? A extends keyof TGroups ? A : never : never,
     TTakeCursors extends boolean = TArgs extends {
-        takeCursors: infer A
-    } ? A extends boolean ? A : never : never,
-> = ([TTakeCursors] extends [never] ? Record<never, never> : {
-    cursor: string
-}) & Pick<
+        takeCursors?: infer A
+    } ? A extends boolean ? A : false : false,
+> = ([TTakeCursors] extends [true] ? {
+    cursor?: string
+} : Record<never, never>) & Pick<
     TResult,
     [TSelect] extends [never] ?
         [TGroupSelected] extends [never] ?
