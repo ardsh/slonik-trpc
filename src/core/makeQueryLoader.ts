@@ -513,17 +513,15 @@ export function makeQueryLoader<
         async load<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
-            TTakeCursors extends boolean = false,
         >(
-            args: LoadParameters<
+            args: Omit<LoadParameters<
                 TFilter,
                 z.infer<TContextZod>,
                 TVirtuals & z.infer<TObject>,
                 (TSelect) & TSelectable,
                 TSortable,
-                TGroupSelected,
-                TTakeCursors
-            >, database?: Pick<CommonQueryMethods, "any">
+                TGroupSelected
+            >, "takeCursors">, database?: Pick<CommonQueryMethods, "any">
         ) {
             // TODO: Remove this
             if (args.selectGroups?.length) {

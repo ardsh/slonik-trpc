@@ -1,5 +1,6 @@
 import type { Column } from '@table-library/react-table-library/types/compact';
 import React from 'react';
+import { CursorPagination, CursorPaginationAction, cursorPaginationReducer, initialCursorPagination, useCursorPaginationActions } from './useCursorPagination';
 
 const diff = (arr1: any[], arr2: any[]) => {
   return arr1.filter(x => !arr2.includes(x));
@@ -8,7 +9,7 @@ const diff = (arr1: any[], arr2: any[]) => {
 type Action = {
   type: "APPEND_FIELDS",
   dependencies: string[]
-};
+} | CursorPaginationAction;
 
 type ColumnDefinitions<TPayload> = Omit<Column, "renderCell" | "dependencies"> & {
   renderCell: (item: TPayload) => React.ReactNode,
@@ -16,7 +17,8 @@ type ColumnDefinitions<TPayload> = Omit<Column, "renderCell" | "dependencies"> &
 };
 
 type State = {
-  dependencies: string[]
+  dependencies: string[],
+  pagination: CursorPagination
 }
 
 const stateReducer = (state: State, action: Action) => {
@@ -27,15 +29,20 @@ const stateReducer = (state: State, action: Action) => {
         // Sort alphabetically to have a stable array
         dependencies: [... new Set(state.dependencies.concat(action.dependencies))].sort(),
       };
-    default: return state;
+    default: return {
+      ...state,
+      pagination: cursorPaginationReducer(state.pagination, action),
+    };
   }
 }
 
 export const  createTableLoader = <TPayload  extends  Record<string, any>>() => {
   const initialState = {
     dependencies: [],
+    pagination: initialCursorPagination,
   };
   const DependenciesContext = React.createContext([] as (keyof TPayload)[]);
+  const PaginationContext = React.createContext<CursorPagination>(null as any);
   const DispatchContext = React.createContext((() => {
     throw new Error("tableDataLoader Context provider not found!");
   }) as React.Dispatch<Action>);
@@ -45,7 +52,9 @@ export const  createTableLoader = <TPayload  extends  Record<string, any>>() => 
       const [state, dispatch] = React.useReducer(stateReducer, initialState);
       return (<DispatchContext.Provider value={dispatch}>
         <DependenciesContext.Provider value={state.dependencies}>
-          {children}
+          <PaginationContext.Provider value={state.pagination}>
+            {children}
+          </PaginationContext.Provider>
         </DependenciesContext.Provider>
       </DispatchContext.Provider>)
     },
@@ -68,15 +77,53 @@ export const  createTableLoader = <TPayload  extends  Record<string, any>>() => 
     },
     useVariables: () => {
       const dependencies = React.useContext(DependenciesContext);
+      const { currentCursor, pageSize = 25, reverse } = React.useContext(PaginationContext);
+
       return React.useMemo(() => ({
         select: dependencies,
-      }), [dependencies]);
+        take: reverse ? -pageSize : pageSize,
+        takeCursors: true,
+        cursor: currentCursor,
+      }), [dependencies, reverse, pageSize, currentCursor]);
     },
     createColumn: <TDependencies extends keyof  TPayload=never>(column: Omit<ColumnDefinitions<TPayload>, "dependencies" | "renderCell"> & {
       dependencies?: TDependencies[],
       renderCell: (data: Pick<TPayload, TDependencies>) =>  React.ReactNode,
     }) => {
       return column;
+    },
+    usePaginationProps: () => {
+      const dispatch = React.useContext(DispatchContext);
+      const pagination = React.useContext(PaginationContext);
+
+      const actions = useCursorPaginationActions(dispatch);
+
+      const getPaginationProps = React.useCallback(() => ({
+        ...pagination,
+        ...actions,
+      }), [actions, pagination]);
+
+      return getPaginationProps;
+    },
+    useUpdateQueryData: (data?: {
+      edges?: readonly TPayload[] | null,
+      pageInfo?: {
+        hasNextPage?: boolean,
+        hasPreviousPage?: boolean,
+        startCursor?: string | null,
+        endCursor?: string | null,
+      }
+    }) => {
+      const dispatch = React.useContext(DispatchContext);
+  
+      React.useEffect(() => {
+        if (data?.pageInfo) {
+          dispatch({
+            type: 'UPDATE_DATA',
+            data: data.pageInfo,
+          });
+        }
+      }, [data, dispatch]);
     },
   }
 }

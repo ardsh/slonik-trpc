@@ -10,6 +10,13 @@ You can also skip this step if you get started with the [minimal-example playgro
 
 You should refer to [slonik's comprehensive documentation](https://github.com/gajus/slonik#usage) for more advanced use cases.
 
+
+## PostgreSQL
+
+This is a good starting point for getting [free PostgreSQL database in the cloud](https://hasura.io/blog/top-postgresql-database-free-tier-solutions/)
+
+Create a database in [Neon](https://neon.tech/), then export the DATABASE_URL by putting it in your .env file.
+
 ## Connecting
 
 Install slonik

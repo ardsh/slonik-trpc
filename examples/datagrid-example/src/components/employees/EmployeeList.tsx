@@ -5,9 +5,9 @@ import { DEFAULT_OPTIONS, getTheme } from '@table-library/react-table-library/ma
 import { Stack, TextField } from '@mui/material';
 import { trpc } from '../../utils/trpc';
 import { employeeTableLoader } from './employeeLoader';
+import CursorPagination from '../../utils/CursorPagination';
 
 export default function EmployeeList() {
-  const pagination = employeeTableLoader.useVariables();
 
   const [search, setSearch] = React.useState('');
   const employeeColumns = employeeTableLoader.useColumns([
@@ -31,18 +31,20 @@ export default function EmployeeList() {
         renderCell: (employee) => employee.company,
     })]);
 
+    const pagination = employeeTableLoader.useVariables();
     const { data, isLoading } = trpc.employees.getPaginated.useQuery(
         {
-            ...pagination,
-            take: 100,
+            ...pagination
         },
         {
             keepPreviousData: true,
         }
     );
+    employeeTableLoader.useUpdateQueryData(data);
 
   const materialTheme = getTheme(DEFAULT_OPTIONS);
   const theme = useTheme(materialTheme);
+  const getPaginationProps = employeeTableLoader.usePaginationProps();
 
 
   const handleSearch = (event: any) => {
@@ -64,7 +66,7 @@ export default function EmployeeList() {
         pageInfo,
       }} theme={theme}
       />
-
+      <CursorPagination {...getPaginationProps()} />
       <br />
     </div>
   );
