@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.7.2
+
+### Patch Changes
+
+-   b3ac708: Added limit to pagination take API
+
 ## 0.7.1
 
 ### Patch Changes
