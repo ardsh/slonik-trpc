@@ -121,7 +121,7 @@ export default function QuickFilteringGrid() {
         usePagination({
             pageSize: 100,
         });
-    const { data, isLoading } = trpc.employees.getPrisma.useQuery(
+    const { data, isLoading } = trpc.employees.getPaginated.useQuery(
         {
             take: pagination.pageSize,
             skip: pagination.currentPage * pagination.pageSize,
@@ -181,7 +181,7 @@ export default function QuickFilteringGrid() {
         [visibleColumns]
     );
     return (
-        <div className="min-h-full">
+        <div className="min-h-screen min-w-full">
             <DataGrid
                 rows={data?.edges || []}
                 disableColumnFilter

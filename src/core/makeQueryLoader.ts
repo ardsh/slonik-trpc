@@ -137,9 +137,9 @@ export type ResultType<
     TGroupSelected extends keyof (TVirtuals & z.infer<TObject>),
     TSelect extends keyof (TVirtuals & z.infer<TObject>),
     TTakeCursors extends boolean = false,
-> = ([TTakeCursors] extends [true] ? {
+> = ([TTakeCursors] extends [false] ? Record<never, never> : {
     cursor?: string
-} : Record<never, never>) & Pick<
+}) & Pick<
         TVirtuals & Omit<z.infer<TObject>, keyof TVirtuals>, // Virtual fields can overwrite real fields
         [TSelect] extends [never] ?
             [TGroupSelected] extends [never] ?
@@ -608,11 +608,8 @@ export function makeQueryLoader<
             const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (take || 25) + 1;
             const finalQuery = getQuery({
                 ...args,
-                take:
-                    typeof take === 'number'
-                        ? // Query an extra row to see if the next page exists
-                          (Math.min(Math.max(0, take), 1000) + extraItems) * reverse
-                        : undefined,
+                take: // Query an extra row to see if the next page exists
+                      (Math.min(Math.max(0, take || 100), 1000) + extraItems) * reverse,
             });
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
                 ...args,
@@ -667,7 +664,7 @@ export type InferPayload<
     } ? Omit<A, "ctx" | "orderBy" | "searchAfter" | "skip" | "take" | "takeCount" | "takeNextPages" | "where" | "cursor"> : never = never,
     TResult extends Record<string, any> = TLoader extends {
         load: (...args: any) => PromiseLike<ArrayLike<infer A>>
-    } ? A extends Record<string, any> ? A : never : any,
+    } ? A extends Record<string, any> ? Exclude<A, "cursor"> : never : any,
     TSelect extends Exclude<keyof TResult, number | symbol> = TArgs extends {
         select: ArrayLike<infer A>
     } ? A extends Exclude<keyof TResult, number | symbol> ? A : never : never,
@@ -682,15 +679,15 @@ export type InferPayload<
     TTakeCursors extends boolean = TArgs extends {
         takeCursors?: infer A
     } ? A extends boolean ? A : false : false,
-> = ([TTakeCursors] extends [true] ? {
+> = ([TTakeCursors] extends [false] ? Record<never, never> : {
     cursor?: string
-} : Record<never, never>) & Pick<
+}) & Pick<
     TResult,
-    [TSelect] extends [never] ?
+    Exclude<[TSelect] extends [never] ?
         [TGroupSelected] extends [never] ?
             keyof TResult :
         (TGroups[TGroupSelected][number]) :
-    (TSelect | TGroups[TGroupSelected][number])
+    (TSelect | TGroups[TGroupSelected][number]), "cursor">
 >;
 
 type Mutable<T> = T & {

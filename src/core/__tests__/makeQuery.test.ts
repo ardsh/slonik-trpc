@@ -1451,6 +1451,8 @@ describe("withQueryLoader", () => {
         expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
             selectGroups: ["ids"],
         }>>();
+        const ambigiousCursors: InferPayload<typeof loader> = null as any;
+        expectTypeOf(ambigiousCursors).not.toHaveProperty("cursor");
     });
 
     // Cursor base64 API
