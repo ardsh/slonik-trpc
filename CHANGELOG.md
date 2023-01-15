@@ -1,5 +1,14 @@
 # slonik-trpc
 
+## 0.8.0
+
+### Minor Changes
+
+-   5a28e4f: BREAKING CHANGES in loadPagination:
+
+    -   Added `pageInfo` object, moved all pageInfo related keys in pageInfo.
+    -   Added cursors array, when takeCursors is specified.
+
 ## 0.7.2
 
 ### Patch Changes
