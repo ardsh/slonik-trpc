@@ -50,7 +50,7 @@ export default function EmployeeList() {
   };
 
   if (!data) return null;
-  const { edges, ...otherData } = data;
+  const { edges, pageInfo } = data;
 
   return (
     <div className='h-screen'>
@@ -61,11 +61,8 @@ export default function EmployeeList() {
 
       <CompactTable columns={employeeColumns} data={{
         nodes: edges || [],
-        pageInfo: {
-            ...otherData,
-        }
+        pageInfo,
       }} theme={theme}
-      
       />
 
       <br />

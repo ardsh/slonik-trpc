@@ -4,9 +4,39 @@ sidebar_position: 15
 
 # Cursor-based pagination
 
-To use cursor-based pagination with the loadPagination function, you can specify the searchAfter option in the pagination arguments. This option takes an object of sortable column values. These values are dependent on the [sortable columns](./sorting.md) option.
+To use cursor-based pagination, start by specifying `takeCursors: true` in your options. This will return a `startCursor` and `endCursor` in the pagination response.
 
-For example, if you want to retrieve the next 25 items in the dataset after a specific cursor, you can do something like this:
+Use these cursors in the cursor pagination when you want to go to the next (or previous page).
+
+## Going to next page
+
+Specify
+
+```ts
+cursor: endCursor,
+take: 25
+```
+
+To get the next 25 items after the current page.
+
+## Going to previous page
+
+Specify
+
+```ts
+cursor: startCursor,
+take: -25
+```
+
+This will get the previous page, before the current one.
+
+## Manual searchAfter option
+
+You can also specify the searchAfter option in the pagination arguments. This option takes an object of sortable column values. These values are dependent on the [sortable columns](./sorting.md) option.
+
+For example, if you want to retrieve the next 25 items in the dataset after a specific element, you can do something like this:
+
+This method is not recommended, over using the `cursor` option, since it's a more complicated method of achieving the same thing. Opaque [base-64 encoded cursors are overall much better.](https://slack.engineering/evolving-api-pagination-at-slack/)
 
 ```ts
 const nextPage = await postsLoader.loadPagination({

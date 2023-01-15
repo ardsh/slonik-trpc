@@ -590,8 +590,8 @@ describe("withQueryLoader", () => {
             orderBy: ["value", "ASC"],
             take: 5
         });
-        expect(query.minimumCount).toEqual(expect.any(Number));
-        expect(query.count).toBeNull();
+        expect(query.pageInfo.minimumCount).toEqual(expect.any(Number));
+        expect(query.pageInfo.count).toBeNull();
         const loaded = await loader.load({
             select: ['value'],
             take: 5,
@@ -611,8 +611,8 @@ describe("withQueryLoader", () => {
             skip,
             take
         });
-        expect(query.count).toEqual(9);
-        expect(query.minimumCount).toEqual(take + skip + 1);
+        expect(query.pageInfo.count).toEqual(9);
+        expect(query.pageInfo.minimumCount).toEqual(take + skip + 1);
     });
 
     it("Returns true total count even if skip is higher than that, minimumCount equal to skip", async () => {
@@ -627,8 +627,8 @@ describe("withQueryLoader", () => {
             skip,
             take
         });
-        expect(query.count).toEqual(9);
-        expect(query.minimumCount).toEqual(skip);
+        expect(query.pageInfo.count).toEqual(9);
+        expect(query.pageInfo.minimumCount).toEqual(skip);
     });
 
     it("Returns minimal count as skip + edges.length + 1 normally", async () => {
@@ -643,8 +643,8 @@ describe("withQueryLoader", () => {
             orderBy: ["userid", "DESC"],
             take: 5
         });
-        expect(query.minimumCount).toEqual(query.edges.length + 1);
-        expect(query.count).toBeNull();
+        expect(query.pageInfo.minimumCount).toEqual(query.edges.length + 1);
+        expect(query.pageInfo.count).toBeNull();
         const keys = Object.keys(query.edges[0]);
         expect(keys).toEqual(expect.arrayContaining(["value"]));
         expect(keys).toHaveLength(1);
@@ -662,11 +662,11 @@ describe("withQueryLoader", () => {
             takeCount: true,
             takeNextPages,
         });
-        expect(query.minimumCount).toEqual(query.edges.length + take*(takeNextPages-1) +1);
-        expect(query.count).toBeDefined();
+        expect(query.pageInfo.minimumCount).toEqual(query.edges.length + take*(takeNextPages-1) +1);
+        expect(query.pageInfo.count).toBeDefined();
         expect(query.edges[1].value).toEqual(expect.any(String));
         expectTypeOf(query.edges[0]).toEqualTypeOf<{ value: string }>();
-        expect(query.hasNextPage).toEqual(true);
+        expect(query.pageInfo.hasNextPage).toEqual(true);
     });
 
     // getLoadArgs
@@ -1188,10 +1188,12 @@ describe("withQueryLoader", () => {
                 id: 1,
                 value: "aaa",
             }],
-            hasPreviousPage: true,
-            hasNextPage: false,
-            minimumCount: 1,
-            count: 9,
+            pageInfo: {
+                hasPreviousPage: true,
+                hasNextPage: false,
+                minimumCount: 1,
+                count: 9,
+            },
         });
         expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "id" < $3)`)
         expect(query.sql).toContain(`ORDER BY "value" DESC, "id" DESC`)
@@ -1229,10 +1231,12 @@ describe("withQueryLoader", () => {
                 id: 1,
                 value: "aaa",
             }],
-            hasPreviousPage: true,
-            hasNextPage: false,
-            minimumCount: 1,
-            count: null,
+            pageInfo: {
+                hasPreviousPage: true,
+                hasNextPage: false,
+                minimumCount: 1,
+                count: null,
+            },
         });
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
@@ -1272,10 +1276,12 @@ describe("withQueryLoader", () => {
                 id: 3,
                 value: "bbb"
             }],
-            hasPreviousPage: true,
-            hasNextPage: true,
-            minimumCount: 3,
-            count: null,
+            pageInfo: {
+                hasPreviousPage: true,
+                hasNextPage: true,
+                minimumCount: 3,
+                count: null,
+            },
         });
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
@@ -1322,10 +1328,12 @@ describe("withQueryLoader", () => {
                 id: 3,
                 value: "bbb"
             }],
-            hasPreviousPage: true,
-            hasNextPage: true,
-            minimumCount: 2,
-            count: null,
+            pageInfo: {
+                hasPreviousPage: true,
+                hasNextPage: true,
+                minimumCount: 2,
+                count: null,
+            },
         });
         expect(query.sql).toContain(`("id" > $1) OR ("id" = $2 AND "value" IS NULL)`)
         expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
@@ -1364,10 +1372,12 @@ describe("withQueryLoader", () => {
                 id: 5,
                 value: "ccc"
             }],
-            hasPreviousPage: true,
-            hasNextPage: true,
-            minimumCount: 2,
-            count: expect.any(Number),
+            pageInfo: {
+                hasPreviousPage: true,
+                hasNextPage: true,
+                minimumCount: 2,
+                count: expect.any(Number),
+            },
         });
         expectTypeOf(data.edges[0]).toEqualTypeOf<InferPayload<typeof loader, {
             select: ["id", "value"],
@@ -1472,12 +1482,13 @@ describe("withQueryLoader", () => {
             orderBy: ["id", "ASC"],
             take
         });
-        expect(query.startCursor).toEqual(expect.any(String));
-        expect(query.endCursor).toEqual(expect.any(String));
+        expect(query.pageInfo.startCursor).toEqual(expect.any(String));
+        expect(query.pageInfo.endCursor).toEqual(expect.any(String));
         expect(query.edges).toEqual(query.edges.map(i => ({
             value: expect.any(String),
-            cursor: expect.any(String),
         })));
+        expect(query.cursors).toBeDefined();
+        expectTypeOf(query.cursors).toEqualTypeOf<(string | null)[] | undefined>();
     });
 
     it("Returns items after cursor", async () => {
@@ -1500,19 +1511,21 @@ describe("withQueryLoader", () => {
         const parsed = parser.parse(args);
         const data = await loader.loadPagination(parsed);
         const query = loader.getQuery(args);
-        const endCursor = data.endCursor;
+        const endCursor = data.pageInfo.endCursor;
         expect(data).toEqual({
+            cursors: ["WyJhYWEiLDFd"],
             edges: [{
-                cursor: expect.any(String),
                 id: 1,
                 value: "aaa",
             }],
-            hasPreviousPage: true,
-            hasNextPage: false,
-            minimumCount: 1,
-            count: null,
-            startCursor: endCursor,
-            endCursor,
+            pageInfo: {
+                hasPreviousPage: true,
+                hasNextPage: false,
+                minimumCount: 1,
+                count: null,
+                startCursor: endCursor,
+                endCursor,
+            },
         });
 
         expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "test_table_bar"."id" < $3)`)
@@ -1521,7 +1534,7 @@ describe("withQueryLoader", () => {
         expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
             select: ["id", "value"],
             takeCursors: true,
-        }>).toEqualTypeOf<{ id: number, value: string, cursor?: string }>();
+        }>).toEqualTypeOf<{ id: number, value: string }>();
     });
 
     it("Can access internal columns for determining the cursor", async () => {
@@ -1544,19 +1557,21 @@ describe("withQueryLoader", () => {
         const parsed = parser.parse(args);
         const data = await loader.loadPagination(parsed);
         const query = loader.getQuery(args);
-        const endCursor = data.endCursor;
+        const endCursor = data.pageInfo.endCursor;
         expect(data).toEqual({
+            cursors: ["WyJhYWEiLDFd"],
             edges: [{
-                cursor: expect.any(String),
                 id: 1,
                 value: "aaa",
             }],
-            hasPreviousPage: true,
-            hasNextPage: false,
-            minimumCount: 1,
-            count: null,
-            startCursor: endCursor,
-            endCursor,
+            pageInfo: {
+                hasPreviousPage: true,
+                hasNextPage: false,
+                minimumCount: 1,
+                count: null,
+                startCursor: endCursor,
+                endCursor,
+            },
         });
 
         expect(query.sql).toContain(`("value" < $1) OR ("value" = $2 AND "id" < $3)`)
@@ -1565,7 +1580,7 @@ describe("withQueryLoader", () => {
         expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
             select: ["id", "value"],
             takeCursors: true,
-        }>).toEqualTypeOf<{ id: number, value: string, cursor?: string }>();
+        }>).toEqualTypeOf<{ id: number, value: string }>();
     });
 
     it("Cursor works with negative take", async () => {
@@ -1592,23 +1607,26 @@ describe("withQueryLoader", () => {
             takeCursors: true,
         });
         const query = loader.getQuery(args);
-        const startCursor = data.edges[0].cursor;
         expect(data).toEqual({
+            cursors: [
+                "WyJiYmIiLDRd",
+                "WyJiYmIiLDNd",
+            ],
             edges: [{
-                cursor: expect.any(String),
                 id: 4,
                 value: "bbb",
             }, {
-                cursor: expect.any(String),
                 id: 3,
                 value: "bbb",
             }],
-            hasPreviousPage: true,
-            hasNextPage: true,
-            minimumCount: 3,
-            count: 9,
-            startCursor: startCursor,
-            endCursor: expect.any(String),
+            pageInfo: {
+                hasPreviousPage: true,
+                hasNextPage: true,
+                minimumCount: 3,
+                count: 9,
+                startCursor: "WyJiYmIiLDRd",
+                endCursor: "WyJiYmIiLDNd",
+            },
         });
 
         expect(query.sql).toContain(`(test_table_bar."value" > $1) OR (test_table_bar."value" = $2 AND "id" > $3)`)
@@ -1616,8 +1634,7 @@ describe("withQueryLoader", () => {
         expect(args).toEqual(parsed);
         expectTypeOf(data.edges[0] as InferPayload<typeof loader, {
             select: ["id", "value"],
-            takeCursors: true,
-        }>).toEqualTypeOf<{ id: number, value: string, cursor?: string }>();
+        }>).toEqualTypeOf<{ id: number, value: string }>();
     });
 
     it("Throws an error with invalid cursors", async () => {

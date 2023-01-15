@@ -211,7 +211,7 @@ export default function QuickFilteringGrid() {
                 page={pagination.currentPage}
                 pageSize={pagination.pageSize}
                 rowsPerPageOptions={[10, 25, 50, 100]}
-                rowCount={data?.count || data?.minimumCount || 0}
+                rowCount={data?.pageInfo?.count || data?.pageInfo?.minimumCount || 0}
                 paginationMode="server"
                 sortingMode="server"
                 onSortModelChange={onSortModelChange}

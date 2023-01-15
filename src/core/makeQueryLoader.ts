@@ -136,10 +136,7 @@ export type ResultType<
     TVirtuals extends Record<string, any>,
     TGroupSelected extends keyof (TVirtuals & z.infer<TObject>),
     TSelect extends keyof (TVirtuals & z.infer<TObject>),
-    TTakeCursors extends boolean = false,
-> = ([TTakeCursors] extends [false] ? Record<never, never> : {
-    cursor?: string
-}) & Pick<
+> = Pick<
         TVirtuals & Omit<z.infer<TObject>, keyof TVirtuals>, // Virtual fields can overwrite real fields
         [TSelect] extends [never] ?
             [TGroupSelected] extends [never] ?
@@ -259,6 +256,7 @@ export function makeQueryLoader<
             : // If unspecified, no field is allowed to be used for sorting
             (z.never() as never);
     const orderByWithoutTransform = z.tuple([sortFields, orderDirection]);
+    const cursorColumns = "cursorcolumns";
     const orderByType = z.tuple([sortFields.transform(field => options.sortableColumns?.[field] || field), orderDirection]);
 
     const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], select?: readonly string[], ctx?: z.infer<TContextZod>): Promise<readonly T[]> => {
@@ -285,18 +283,6 @@ export function makeQueryLoader<
                     }
                 }));
             }
-        }
-        if (options.sortableColumns) {
-            return rows.map(row => {
-                if (row["cursorcolumns"]) {
-                    const { cursorcolumns, ...rest } = row;
-                    return {
-                        ...rest as typeof row,
-                        cursor: rest.cursor ? rest.cursor : toCursor(cursorcolumns),
-                    };
-                }
-                return row;
-            });
         }
         return rows;
     }
@@ -341,9 +327,9 @@ export function makeQueryLoader<
             orderBy?.length ? [orderByWithoutTransform.parse(orderBy)] : null;
         const conditions = [whereCondition].filter(notEmpty);
         const cursorsEnabled = takeCursors && orderExpressions?.length;
-        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect, TTakeCursors>>
+        const zodType: z.ZodType<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect>>
             = cursorsEnabled ? (isPartial ? type.partial() : type).merge(z.object({
-                cursorcolumns: z.any(),
+                [cursorColumns]: z.any(),
             })) : (isPartial ? type.partial() : type) as any;
         const fields = Object.keys(type?.keyof?.()?.Values || {}) as any[];
         const selectable = options?.selectableColumns;
@@ -418,7 +404,7 @@ export function makeQueryLoader<
             finalKeys.push(sql.fragment`*`);
         }
         if (takeCursors && lateralExpressions?.length) {
-            finalKeys.push(sql.fragment`root_query.cursorcolumns`);
+            finalKeys.push(sql.identifier(["root_query", cursorColumns]));
         }
 
         // Run another root query, that only selects the column names that aren't excluded, or only ones that are included.
@@ -547,7 +533,10 @@ export function makeQueryLoader<
             const db = database || options?.db;
             const reverse = !!args.take && args.take < 0;
             if (!db?.any) throw new Error("Database not provided");
-            const finalQuery = getQuery(args);
+            const finalQuery = getQuery({
+                ...args,
+                takeCursors: false,
+            });
             debug(finalQuery.sql);
             return db.any(finalQuery).then(async rows => {
                 return mapTransformRows(reverse ? (rows as any).reverse() as never : rows, args.select, args.ctx);
@@ -632,22 +621,36 @@ export function makeQueryLoader<
                 .any(finalQuery)
                 .then(async (edges) => {
                     const slicedEdges = edges.slice(0, take || undefined);
+                    const rows = reverse === -1 ? slicedEdges.reverse() as never : slicedEdges;
                     const cursors = args.takeCursors && {
-                        startCursor: toCursor((slicedEdges[0] as any)?.["cursorcolumns"]),
-                        endCursor: toCursor((slicedEdges[slicedEdges.length - 1] as any)?.["cursorcolumns"]),
+                        startCursor: toCursor((rows[0] as any)?.[cursorColumns]),
+                        endCursor: toCursor((rows[rows.length - 1] as any)?.[cursorColumns]),
+                        cursors: rows.map((row: any) => {
+                            if (row[cursorColumns]) {
+                                const { cursorcolumns } = row;
+                                delete row[cursorColumns];
+                                return toCursor(cursorcolumns);
+                            }
+                            return null;
+                        }),
                     };
                     const hasMore = edges.length > slicedEdges.length;
                     const hasPrevious = !!args.skip || (!!args.cursor || !!args.searchAfter);
                     return {
-                        edges: await mapTransformRows(reverse === -1 ? slicedEdges.reverse() as never : slicedEdges, args.select, args.ctx),
-                        hasPreviousPage: reverse === -1 ? hasMore : hasPrevious,
-                        hasNextPage: reverse === -1 ? hasPrevious : hasMore,
-                        minimumCount: (args.skip || 0) + edges.length,
-                        ...(reverse === -1 && cursors ? {
-                            startCursor: cursors.endCursor,
-                            endCursor: cursors.startCursor,
-                        } : cursors),
-                        count: await countPromise.catch(err => console.error('Count query failed', err)),
+                        edges: await mapTransformRows(rows, args.select, args.ctx),
+                        ...(cursors && {
+                            cursors: cursors.cursors
+                        }),
+                        pageInfo: {
+                            hasPreviousPage: reverse === -1 ? hasMore : hasPrevious,
+                            hasNextPage: reverse === -1 ? hasPrevious : hasMore,
+                            minimumCount: (args.skip || 0) + edges.length,
+                            ...(cursors && {
+                                startCursor: cursors.startCursor,
+                                endCursor: cursors.endCursor,
+                            }),
+                            count: await countPromise.catch(err => console.error('Count query failed', err)),
+                        }
                     };
                 });
         },
@@ -676,18 +679,13 @@ export type InferPayload<
     TGroupSelected extends keyof TGroups = TArgs extends {
         selectGroups: ArrayLike<infer A>
     } ? A extends keyof TGroups ? A : never : never,
-    TTakeCursors extends boolean = TArgs extends {
-        takeCursors?: infer A
-    } ? A extends boolean ? A : false : false,
-> = ([TTakeCursors] extends [false] ? Record<never, never> : {
-    cursor?: string
-}) & Pick<
+> = Pick<
     TResult,
-    Exclude<[TSelect] extends [never] ?
+    [TSelect] extends [never] ?
         [TGroupSelected] extends [never] ?
             keyof TResult :
         (TGroups[TGroupSelected][number]) :
-    (TSelect | TGroups[TGroupSelected][number]), "cursor">
+    (TSelect | TGroups[TGroupSelected][number])
 >;
 
 type Mutable<T> = T & {

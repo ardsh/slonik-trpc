@@ -5,7 +5,6 @@
     "scripts": {
         "build": "next build",
         "dev": "next dev",
-        "postinstall": "prisma generate",
         "db:push": "yarn prisma db push",
         "lint": "next lint",
         "start": "next start"
@@ -26,7 +25,7 @@
         "react": "18.2.0",
         "react-dom": "18.2.0",
         "slonik": "^33.0.4",
-        "slonik-trpc": "^0.7.1",
+        "slonik-trpc": "^0.8.0",
         "superjson": "1.9.1",
         "zod": "^3.19.1"
     },
