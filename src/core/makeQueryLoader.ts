@@ -239,12 +239,14 @@ export function makeQueryLoader<
     };
     defaults?: {
         orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+        /** The max limit when querying loadPagination. Can be increased from the default 1000 */
+        maxLimit?: number
     };
 }) {
     const query = options.query;
-    if (query.sql.includes(';')) {
+    if (query.sql.match(/;\s*$/)) {
         // TODO: Add more checks for invalid queries
-        console.warn("Your query includes semicolons. Please refer to the documentation of slonik-trpc, and do not include semicolons in the query:\n " + query.sql);
+        console.warn("Your query includes semicolons at the end. Please refer to the documentation of slonik-trpc, and do not include semicolons in the query:\n " + query.sql);
     }
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
     if (!type || !type.keyof || !type.partial) throw new Error('Invalid query type provided: ' + (type));
@@ -354,10 +356,10 @@ export function makeQueryLoader<
                     sql: query.sql.replace(/^\n*(\W\n?)*SELECT/i, "SELECT lateralcolumns.cursorjson cursorcolumns, "),
                 }
             }
-            lateralExpressions.push(sql.fragment`json_build_array(${
+            lateralExpressions.push(sql.fragment`json_build_object(${
                 orderExpressions.length
                   ? sql.join(
-                      orderExpressions.map((expression) => interpretFieldFragment(orderByType.parse(expression)[0])),
+                      orderExpressions.flatMap((expression) => [sql.literalValue(expression[0]), interpretFieldFragment(orderByType.parse(expression)[0])]),
                       sql.fragment`,`
                     )
                   : sql.fragment``
@@ -365,7 +367,13 @@ export function makeQueryLoader<
         }
         if ((searchAfter || cursor) && orderExpressions?.length) {
             const orderByExpressions = orderExpressions.map(parsed => [interpretFieldFragment(orderByType.parse(parsed)[0]), parsed[1], parsed[0]] as const);
-            const cursorValues = cursor ? fromCursor(cursor) : [];
+            const cursorValues = cursor ? fromCursor(cursor) : {} as never;
+            if (Array.isArray(cursorValues)) {
+                // Patching old array cursors...temporary only until next minor version
+                cursorValues.forEach((value, idx) => {
+                    cursorValues[orderExpressions[idx][0]] = value;
+                });
+            }
             conditions.push(
                 sql.fragment`(${sql.join(
                 orderByExpressions.map((_, outerIndex) => {
@@ -378,7 +386,7 @@ export function makeQueryLoader<
                     expressions.map(([expression, direction, columnAlias], innerIndex) => {
                         let operator = sql.fragment`=`;
                         let nullFragment = sql.fragment`TRUE`;
-                        const value = searchAfter ? searchAfter[columnAlias] : cursorValues[innerIndex];
+                        const value = searchAfter ? searchAfter[columnAlias] : cursorValues[columnAlias];
                         if (innerIndex === expressions.length - 1) {
                             operator = direction === (reverse ? "DESC" : "ASC")
                                 ? sql.fragment`>` : sql.fragment`<`;
@@ -596,7 +604,7 @@ export function makeQueryLoader<
             const finalQuery = getQuery({
                 ...args,
                 take: // Query an extra row to see if the next page exists
-                      (Math.min(Math.max(0, take || 100), 1000) + extraItems) * reverse,
+                      (Math.min(Math.max(0, take || 100), (options.defaults?.maxLimit || 1000)) + extraItems) * reverse,
             });
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
                 ...args,

@@ -1503,7 +1503,7 @@ describe("withQueryLoader", () => {
         const args = {
             select: ['id', 'value'] as const,
             takeCursors: true,
-            cursor: "WyJhYWEiLDJd",
+            cursor: "eyJ2YWx1ZSI6ImFhYSIsImlkIjoyfQ==",
             take: 1,
             orderBy: [["value", "DESC"], ["id", "DESC"]] as const
         } as const;
@@ -1513,7 +1513,7 @@ describe("withQueryLoader", () => {
         const query = loader.getQuery(args);
         const endCursor = data.pageInfo.endCursor;
         expect(data).toEqual({
-            cursors: ["WyJhYWEiLDFd"],
+            cursors: ["eyJ2YWx1ZSI6ImFhYSIsImlkIjoxfQ=="],
             edges: [{
                 id: 1,
                 value: "aaa",
@@ -1549,7 +1549,7 @@ describe("withQueryLoader", () => {
         const args = {
             select: ['id', 'value'] as const,
             takeCursors: true,
-            cursor: "WyJhYWEiLDJd",
+            cursor: "eyJ2YWx1ZSI6ImFhYSIsImlkIjoyfQ==",
             take: 1,
             orderBy: [["value", "DESC"], ["id", "DESC"]] as const
         } as const;
@@ -1559,7 +1559,7 @@ describe("withQueryLoader", () => {
         const query = loader.getQuery(args);
         const endCursor = data.pageInfo.endCursor;
         expect(data).toEqual({
-            cursors: ["WyJhYWEiLDFd"],
+            cursors: ["eyJ2YWx1ZSI6ImFhYSIsImlkIjoxfQ=="],
             edges: [{
                 id: 1,
                 value: "aaa",
@@ -1595,7 +1595,7 @@ describe("withQueryLoader", () => {
         const args = {
             select: ['id', 'value'] as const,
             takeCursors: true,
-            cursor: "WyJhYWEiLDJd",
+            cursor: "eyJ2YWx1ZSI6ImFhYSIsImlkIjoyfQ==",
             takeCount: true,
             take: -2,
             orderBy: [["value", "DESC"], ["id", "DESC"]] as const
@@ -1609,8 +1609,8 @@ describe("withQueryLoader", () => {
         const query = loader.getQuery(args);
         expect(data).toEqual({
             cursors: [
-                "WyJiYmIiLDRd",
-                "WyJiYmIiLDNd",
+                "eyJ2YWx1ZSI6ImJiYiIsImlkIjo0fQ==",
+                "eyJ2YWx1ZSI6ImJiYiIsImlkIjozfQ==",
             ],
             edges: [{
                 id: 4,
@@ -1624,8 +1624,8 @@ describe("withQueryLoader", () => {
                 hasNextPage: true,
                 minimumCount: 3,
                 count: 9,
-                startCursor: "WyJiYmIiLDRd",
-                endCursor: "WyJiYmIiLDNd",
+                startCursor: "eyJ2YWx1ZSI6ImJiYiIsImlkIjo0fQ==",
+                endCursor: "eyJ2YWx1ZSI6ImJiYiIsImlkIjozfQ==",
             },
         });
 
