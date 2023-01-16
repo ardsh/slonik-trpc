@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.8.1
+
+### Patch Changes
+
+-   6e5a2da: Changed cursors to encode json objects instead of arrays
+
 ## 0.8.0
 
 ### Minor Changes
