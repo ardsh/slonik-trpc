@@ -217,7 +217,19 @@ const lastPage = await db.any(sortableLoader.getQuery({
 
 ### Cursor-based pagination
 
-If you've enabled sorting, you can use cursor-based pagination with `searchAfter`. Simply specify the values of the item you'd like to paginate after, to use as a cursor.
+If you've enabled any sorting columns, you can use cursor-based pagination with `cursur`. Simply specify the cursor of the item you'd like to paginate after.
+
+```ts
+const usersAfterBob = await db.any(sortableLoader.getQuery({
+    orderBy: [["name", "DESC"], ["id", "ASC"]],
+    cursor: "eyJuYW1lIjoiQm9iIiwiaWQiOjQ1fQ==",
+    take: 5,
+}));
+```
+
+#### Manual cursor-based pagination
+
+You can also do prisma-style cursor pagination by supplying the values yourself.
 
 ```ts
 const usersAfterBob = await db.any(sortableLoader.getQuery({
@@ -229,6 +241,8 @@ const usersAfterBob = await db.any(sortableLoader.getQuery({
     take: 5,
 }))
 ```
+
+This is equivalent to the above example, since `eyJuYW1lIjoiQm9iIiwiaWQiOjQ1fQ==` base64 decoded is `{"name":"Bob","id":45}`.
 
 ### Virtual fields
 
@@ -251,7 +265,7 @@ const virtualFieldsLoader = makeQueryLoader({
 
 The virtual fields can then be selected like normal fields.
 
-Refer to the [playground](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc) for a more complete example.
+Refer to the [minimal-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc), or [datagrid-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/datagrid-example) for more complete examples.
 
 
 ## Known issues
