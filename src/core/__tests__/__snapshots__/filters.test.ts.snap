@@ -2,7 +2,9 @@
 
 exports[`AND Filters 1`] = `
 {
-  "sql": "((("uid" = ANY($1::"text"[]))) AND (("id" = $2))) AND (uid = 'x')",
+  "sql": "((("uid" = ANY($1::"text"[]))) AND (("id" = $2)))
+ AND (uid = 'x')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -16,7 +18,11 @@ exports[`AND Filters 1`] = `
 
 exports[`AND Filters 2`] = `
 {
-  "sql": "("value" ILIKE '%cheap%') AND ((("uid" = ANY($1::"text"[]))) AND (("id" = $2))) AND (uid = 'x') AND (uid = 'anotherFilter')",
+  "sql": "("value" ILIKE '%cheap%')
+ AND ((("uid" = ANY($1::"text"[]))) AND (("id" = $2)))
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -30,7 +36,11 @@ exports[`AND Filters 2`] = `
 
 exports[`AND Filters deeply nested with OR 1`] = `
 {
-  "sql": "("value" ILIKE '%cheap%') AND ((((("uid" = ANY($1::"text"[])) AND (NOT (NOT ( "value" ILIKE '%cheap%' )))) OR ((NOT ( "date" < NOW() ))))) AND (("id" = $2::"numeric"[]))) AND (uid = 'x') AND (uid = 'anotherFilter')",
+  "sql": "("value" ILIKE '%cheap%')
+ AND ((((("uid" = ANY($1::"text"[])) AND (NOT (NOT ( "value" ILIKE '%cheap%' )))) OR ((NOT ( "date" < NOW() ))))) AND (("id" = $2::"numeric"[])))
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -47,7 +57,9 @@ exports[`AND Filters deeply nested with OR 1`] = `
 
 exports[`AND Filters nested with OR 1`] = `
 {
-  "sql": "((((("uid" = ANY($1::"text"[]))) OR ((NOT ( "id" > 5 ))))) AND (("id" = $2))) AND (uid = 'x')",
+  "sql": "((((("uid" = ANY($1::"text"[]))) OR ((NOT ( "id" > 5 ))))) AND (("id" = $2)))
+ AND (uid = 'x')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -61,7 +73,11 @@ exports[`AND Filters nested with OR 1`] = `
 
 exports[`AND Filters nested with OR 2`] = `
 {
-  "sql": "("value" ILIKE '%cheap%') AND ((((("uid" = ANY($1::"text"[]))) OR ((NOT ( "id" > 5 ))))) AND (("id" = $2))) AND (uid = 'x') AND (uid = 'anotherFilter')",
+  "sql": "("value" ILIKE '%cheap%')
+ AND ((((("uid" = ANY($1::"text"[]))) OR ((NOT ( "id" > 5 ))))) AND (("id" = $2)))
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -75,7 +91,9 @@ exports[`AND Filters nested with OR 2`] = `
 
 exports[`Filters on array string fields with a single string 1`] = `
 {
-  "sql": "("uid" = ANY($1::"text"[])) AND (uid = 'x')",
+  "sql": "("uid" = ANY($1::"text"[]))
+ AND (uid = 'x')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -87,7 +105,11 @@ exports[`Filters on array string fields with a single string 1`] = `
 
 exports[`Filters on array string fields with a single string 2`] = `
 {
-  "sql": "("uid" = ANY($1::"text"[])) AND ("value" ILIKE '%cheap%') AND (uid = 'x') AND (uid = 'anotherFilter')",
+  "sql": "("uid" = ANY($1::"text"[]))
+ AND ("value" ILIKE '%cheap%')
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -99,7 +121,9 @@ exports[`Filters on array string fields with a single string 2`] = `
 
 exports[`Filters on array string fields with multiple 1`] = `
 {
-  "sql": "("uid" = ANY($1::"text"[])) AND (uid = 'x')",
+  "sql": "("uid" = ANY($1::"text"[]))
+ AND (uid = 'x')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -112,7 +136,11 @@ exports[`Filters on array string fields with multiple 1`] = `
 
 exports[`Filters on array string fields with multiple 2`] = `
 {
-  "sql": "("uid" = ANY($1::"text"[])) AND ("value" ILIKE '%cheap%') AND (uid = 'x') AND (uid = 'anotherFilter')",
+  "sql": "("uid" = ANY($1::"text"[]))
+ AND ("value" ILIKE '%cheap%')
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     [
@@ -125,7 +153,9 @@ exports[`Filters on array string fields with multiple 2`] = `
 
 exports[`Filters on date fields 1`] = `
 {
-  "sql": "(("date" > $1)) AND (uid = 'x')",
+  "sql": "(("date" > $1))
+ AND (uid = 'x')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     "2022-02-03",
@@ -135,7 +165,11 @@ exports[`Filters on date fields 1`] = `
 
 exports[`Filters on date fields 2`] = `
 {
-  "sql": "(("date" > $1)) AND ("value" ILIKE '%cheap%') AND (uid = 'x') AND (uid = 'anotherFilter')",
+  "sql": "(("date" > $1))
+ AND ("value" ILIKE '%cheap%')
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     "2022-02-03",

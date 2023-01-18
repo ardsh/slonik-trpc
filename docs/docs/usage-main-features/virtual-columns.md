@@ -45,7 +45,7 @@ const virtualFieldsLoader = makeQueryLoader({
     virtualFields: {
         content: {
             dependencies: ["content"],
-            async resolve(row, ctx) {
+            resolve(row, ctx) {
                 if (!ctx.isLoggedIn) {
                     // Return null if user isn't logged in.
                     return null;

@@ -424,6 +424,9 @@ describe("withQueryLoader", () => {
             ids: ["id", "uid"],
             values: ["id", "dummyField"],
         },
+        options: {
+            runtimeCheck: true,
+        },
         filters: {
             filters: {
                 largeIds: z.boolean(),
@@ -472,6 +475,10 @@ describe("withQueryLoader", () => {
     it("Selects dependent fields", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
+            options: {
+                ...genericOptions.options,
+                runtimeCheck: false,
+            }
         });
         const result = await loader.load({
             select: ["dummyField"],
@@ -1427,6 +1434,10 @@ describe("withQueryLoader", () => {
     it("Disallows selecting non-existing groups but acts as if all were selected (BUG)", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
+            options: {
+                ...genericOptions.options,
+                runtimeCheck: false,
+            }
         });
         const data = await loader.load({
             take: 1,

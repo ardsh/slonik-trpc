@@ -237,10 +237,20 @@ export function makeQueryLoader<
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
     };
-    defaults?: {
-        orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+    options?: {
         /** The max limit when querying loadPagination. Can be increased from the default 1000 */
         maxLimit?: number
+        /** Whether you want to run the specified zod parser for the returned rows.
+         * Used in `loadPagination` and `load`.
+         * 
+         * NOTE: This can affect performance negatively, depending on the parser you use, and is unnecessary if you're using zod parsing in slonik's interceptor
+         * @default false
+         * */
+        runtimeCheck?: boolean
+    },
+    defaults?: {
+        orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+        take?: number;
     };
 }) {
     const query = options.query;
@@ -286,7 +296,12 @@ export function makeQueryLoader<
                 }));
             }
         }
-        return rows;
+        if (options?.options?.runtimeCheck) {
+            const zodType = type.partial();
+            return rows.map(row => zodType.parse(row)) as never;
+        } else {
+            return rows;
+        }
     }
     const getQuery = <
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
@@ -541,6 +556,7 @@ export function makeQueryLoader<
             if (!db?.any) throw new Error("Database not provided");
             const finalQuery = getQuery({
                 ...args,
+                take: typeof args.take === 'number' ? args.take : (options?.defaults?.take),
                 takeCursors: false,
             });
             debug(finalQuery.sql);
@@ -593,6 +609,9 @@ export function makeQueryLoader<
                 const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
                 args.select = (args.select || []).concat(...groupFields as any[]);
             }
+            if (!args.take && typeof args.take !== 'number' && options?.defaults?.take) {
+                args.take = options.defaults.take;
+            }
             const db = database || options?.db;
             if (!db?.any) throw new Error("Database not provided");
             const reverse = !!args.take && args.take < 0 ? -1 : 1;
@@ -604,7 +623,7 @@ export function makeQueryLoader<
             const finalQuery = getQuery({
                 ...args,
                 take: // Query an extra row to see if the next page exists
-                      (Math.min(Math.max(0, take || 100), (options.defaults?.maxLimit || 1000)) + extraItems) * reverse,
+                      (Math.min(Math.max(0, take || 100), (options.options?.maxLimit || 1000)) + extraItems) * reverse,
             });
             const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
                 ...args,

@@ -4,6 +4,8 @@
 
 This can make API creation very easy and flexible, especially for [tRPC](https://github.com/trpc/trpc) queries, while remaining very efficient and secure, thanks to slonik and zod.
 
+You can think of it like a mini-[hasura](https://hasura.io/) for tRPC. It doesn't have nearly as many features as hasura, but it's great if all you need is the flexibility to run some SQL queries in a safe way, and automatically build an API with many features.
+
 ## Features
 
 - [x] Declarative [filtering API](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/filtering) (filter creation utils included!)
@@ -12,6 +14,7 @@ This can make API creation very easy and flexible, especially for [tRPC](https:/
 - [x] [Select the fields](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/overfetching) you need, to avoid the overfetching problem.
   - [x] Fully type-safe, only selected fields are returned in the types.
 - [x] Runtime validation of input (completely safe against unsanitized inputs).
+- [x] Optional runtime validation of output (Your zod types can be executed against your result, including transforming the output fields easily with zod transformers).
 - [x] [Virtual field](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/virtual-columns) declaration in typescript (fully type-safe + with async support).
 - [x] [Declarative sorting](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/sorting) capabilities, with support for custom SQL sorting expressions
 - [x] [Offset-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/pagination).
@@ -179,6 +182,36 @@ const filters = createFilters<Context>()({
 })
 ```
 
+#### Postprocessing columns
+
+If you need to check specific columns, you can virtualize them with the same name, and run any checks.
+
+```ts
+const virtualFieldsLoader = makeQueryLoader({
+    query,
+    virtualFields: {
+        name: {
+            resolve(row, ctx) {
+                if (!ctx.isLoggedIn) {
+                    // Return null if user isn't logged in.
+                    return null;
+                }
+                return row.name;
+            }
+        },
+        email: {
+            resolve(row, ctx) {
+                if (ctx.isAdmin) {
+                    // Only return user emails if current user is admin.
+                    return row.email;
+                }
+                return null;
+            },
+        },
+    }
+});
+```
+
 ### Sorting
 
 Define your sortable column aliases. You can use strings or sql fragments to identify the columns.
@@ -266,6 +299,63 @@ const virtualFieldsLoader = makeQueryLoader({
 The virtual fields can then be selected like normal fields.
 
 Refer to the [minimal-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc), or [datagrid-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/datagrid-example) for more complete examples.
+
+## FAQ
+
+### I don't wanna switch database clients (e.g. I'm already using Prisma client)
+
+This is not officially supported, but you can actually provide any function to the `db` loader argument. Then you won't have to setup slonik client and can use another one like prisma client, as long as it's able to send SQL queries.
+So with prisma you can write the following when creating the loader:
+
+```ts
+export const loader = makeQueryLoader({
+    query,
+    db: {
+        any: (sql) => {
+            return prisma.$queryRawUnsafe(sql.sql, ...sql.values);
+        }
+    },
+    // ...
+```
+
+You still need to install slonik and zod though, for composing query fragments with. Since the SQL string is generated from slonik, it's completely safe from SQL injection, so it's safe to be used with `prisma.$queryRawUnsafe`.
+
+It is likely you will run into issues doing this though, so using the slonik package as a client is recommended. [Refer to the documentation](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/slonik) for a minimal setup example of slonik client.
+
+### Can I use custom SQL views or sub-queries
+
+Yes, any PostgreSQL query is supported. So you can do anything that is allowed in PostgreSQL, e.g. to get postCount of users directly in a sub-query do
+
+```sql
+SELECT id
+  , name
+  , (SELECT COUNT(*) FROM posts WHERE users.id = posts.author_id) AS postCount
+  , email
+  , created_at
+FROM users
+```
+
+### Why do I have to declare both zod types and SQL queries 
+
+It is theoretically possible to infer the zod type from the SQL query you write.
+E.g. [@slonik/typegen](https://github.com/mmkal/slonik-tools/tree/main/packages/typegen) generates typescript types.
+
+Let me know if there already are packages that convert PostgreSQL queries to zod types, we can try to make them compatible and easier to work with the query loaders.
+
+This is a good issue to contribute on! All help is welcome.
+
+### Can I see the SQL queries that are being executed
+
+If you mean debugging during runtime, you can do `export DEBUG=slonik-trpc`.
+You can also run `getQuery` with the same parameters as `load/loadPagination`, and it will return the raw SQL query without executing anything.
+
+This is useful for many reasons, e.g. if you want to analyze a slow query, you can measure the time it takes to run, and then print out the SQL for any queries that are slower than a threshold.
+
+Note that `loadPagination` will run an extra query for getting the total count, if you specify `takeCount: true`. This is the same query as returned by getQuery, but wrapped in a `SELECT COUNT` query like
+
+```sql
+SELECT COUNT(*) FROM (...) subQuery
+```
 
 
 ## Known issues

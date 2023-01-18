@@ -213,7 +213,7 @@ export function makeFilter<
     const getWhereFragment = (filter: ActualFilters, context?: TContext) => {
         const conditions = getConditions(filter, context);
         return conditions?.length
-            ? sql.fragment`(${sql.join(conditions, sql.fragment`) AND (`)})`
+            ? sql.fragment`(${sql.join(conditions, sql.fragment`)\n AND (`)})\n`
             : sql.fragment`TRUE`;
     };
     return getWhereFragment;
