@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.8.2
+
+### Patch Changes
+
+-   c66a58d: Added runtime checking of result rows
+
 ## 0.8.1
 
 ### Patch Changes
