@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.8.3
+
+### Patch Changes
+
+-   73b74e2: Added zod any support, and sqlite experimental support
+
 ## 0.8.2
 
 ### Patch Changes
