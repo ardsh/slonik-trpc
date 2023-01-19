@@ -342,7 +342,7 @@ E.g. [@slonik/typegen](https://github.com/mmkal/slonik-tools/tree/main/packages/
 
 Let me know if there already are packages that convert PostgreSQL queries to zod types, we can try to make them compatible and easier to work with the query loaders.
 
-This is a good issue to contribute on! All help is welcome.
+This is a good issue to contribute on. All help is welcome!
 
 ### Can I see the SQL queries that are being executed
 
@@ -431,7 +431,7 @@ You don't need to do this if your selects are dynamic, in that case simply consi
 
 Also this is not necessary when querying the loader directly in the serverside, in those cases fields will be automatically inferred depending on your selections.
 
-There are more advanced patterns to support relay-like fragment selections, or tabular data loading that allows rendering each table column in a type-safe method.
+There are more advanced patterns to support [relay-like fragment selections](https://dev.to/ardsh/how-to-solve-overfetching-with-trpc-apis-when-rendering-tables-pt-1-fbg), or [tabular data loading](https://dev.to/ardsh/implementing-cursor-pagination-with-trpc-queries-3ifd) that allows rendering each table column in a type-safe method.
 
 ## 🤝 Contributing
 

@@ -629,7 +629,6 @@ describe("withQueryLoader", () => {
         const take = 5;
         const skip = 200;
         const query = await loader.loadPagination({
-            select: ['value'],
             takeCount: true,
             skip,
             take
@@ -638,6 +637,44 @@ describe("withQueryLoader", () => {
         expect(query.pageInfo.minimumCount).toEqual(skip);
     });
 
+    it("Returns all keys if type is a zod.any() type (intentional skipping)", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: sql.type(z.any())`SELECT * FROM test_table_bar`,
+        });
+        const take = 1;
+        const query = await loader.loadPagination({
+            takeCount: true,
+            take
+        });
+        expect(query.edges).toEqual([{
+            id: 1,
+            uid: "z",
+            value: "aaa",
+            date: expect.anything(),
+        }]);
+    });
+
+    it("Returns query without using lateral join if sqlite", async () => {
+        const loader = makeQueryLoader({
+            db,
+            options: {
+                useSqlite: true,
+            },
+            sortableColumns: {
+                id: "id",
+            },
+            query: sql.type(z.any())`SELECT * FROM test_table_bar`,
+        });
+        const take = 1;
+        const query = await loader.getQuery({
+            takeCursors: true,
+            take,
+            orderBy: ["id", "ASC"],
+        });
+        expect(query.sql).toContain("cursorcolumns");
+        expect(query.sql.toUpperCase()).not.toContain("LATERAL");
+    });
     it("Returns minimal count as skip + edges.length + 1 normally", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
@@ -1512,7 +1549,6 @@ describe("withQueryLoader", () => {
             }
         });
         const args = {
-            select: ['id', 'value'] as const,
             takeCursors: true,
             cursor: "eyJ2YWx1ZSI6ImFhYSIsImlkIjoyfQ==",
             take: 1,
@@ -1527,6 +1563,7 @@ describe("withQueryLoader", () => {
             cursors: ["eyJ2YWx1ZSI6ImFhYSIsImlkIjoxfQ=="],
             edges: [{
                 id: 1,
+                uid: "z",
                 value: "aaa",
             }],
             pageInfo: {

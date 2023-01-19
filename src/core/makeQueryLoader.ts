@@ -238,6 +238,12 @@ export function makeQueryLoader<
         };
     };
     options?: {
+        /**
+         * EXPERIMENTAL SUPPORT
+         * 
+         * If specified true, the engine will try to use SQLite syntax instead of PostgreSQL syntax.
+         * */
+        useSqlite?: boolean
         /** The max limit when querying loadPagination. Can be increased from the default 1000 */
         maxLimit?: number
         /** Whether you want to run the specified zod parser for the returned rows.
@@ -259,7 +265,9 @@ export function makeQueryLoader<
         console.warn("Your query includes semicolons at the end. Please refer to the documentation of slonik-trpc, and do not include semicolons in the query:\n " + query.sql);
     }
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
-    if (!type || !type.keyof || !type.partial) throw new Error('Invalid query type provided: ' + (type));
+    // @ts-expect-error accessing internal _any
+    const isAnyType = type._any === true;
+    if (!isAnyType && (!type || !type.keyof || !type.partial)) throw new Error('Invalid query type provided: ' + (type));
     type TFilter = z.infer<ZodPartial<TFilterTypes>>;
     const interpretFilters = options?.filters?.interpreters ? makeFilter<TFilterTypes, z.infer<TContextZod>>(options.filters.interpreters, options.filters?.options) : null;
     const sortableAliases = Object.keys(options?.sortableColumns || {}) as [TSortable, ...TSortable[]];
@@ -345,7 +353,7 @@ export function makeQueryLoader<
         const conditions = [whereCondition].filter(notEmpty);
         const cursorsEnabled = takeCursors && orderExpressions?.length;
         const zodType: z.ZodType<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect>>
-            = cursorsEnabled ? (isPartial ? type.partial() : type).merge(z.object({
+            = isAnyType ? type : cursorsEnabled ? (isPartial ? type.partial() : type).merge(z.object({
                 [cursorColumns]: z.any(),
             })) : (isPartial ? type.partial() : type) as any;
         const fields = Object.keys(type?.keyof?.()?.Values || {}) as any[];
@@ -362,23 +370,34 @@ export function makeQueryLoader<
             .filter(notEmpty)
             .filter((column) => noneSelected || select?.includes(column as any))
         ).values()).map(a => sql.identifier([a])) as any[];
-        const lateralExpressions = [];
+        const lateralExpressions = [] as SqlFragment[];
         if (takeCursors && orderExpressions?.length) {
-            if (!query.sql.includes("lateralcolumns.cursorjson")) {
-                // Hacky way to get access to internal FROM tables for sorting expressions...
-                actualQuery = {
-                    ...query,
-                    sql: query.sql.replace(/^\n*(\W\n?)*SELECT/i, "SELECT lateralcolumns.cursorjson cursorcolumns, "),
+            if (options.options?.useSqlite) {
+                finalKeys.push(sql.fragment`json_object(${
+                    orderExpressions.length
+                      ? sql.join(
+                          orderExpressions.flatMap((expression) => [sql.literalValue(expression[0]), interpretFieldFragment(orderByType.parse(expression)[0])]),
+                          sql.fragment`,`
+                        )
+                      : sql.fragment``
+                  }) ${sql.identifier([cursorColumns])}`);
+            } else {
+                if (!query.sql.includes("lateralcolumns.cursorjson")) {
+                    // Hacky way to get access to internal FROM tables for sorting expressions...
+                    actualQuery = {
+                        ...query,
+                        sql: query.sql.replace(/^\n*(\W\n?)*SELECT/i, `SELECT lateralcolumns.cursorjson ${cursorColumns}, `),
+                    }
                 }
+                lateralExpressions.push(sql.fragment`json_build_object(${
+                    orderExpressions.length
+                      ? sql.join(
+                          orderExpressions.flatMap((expression) => [sql.literalValue(expression[0]), interpretFieldFragment(orderByType.parse(expression)[0])]),
+                          sql.fragment`,`
+                        )
+                      : sql.fragment``
+                  }) cursorjson`);
             }
-            lateralExpressions.push(sql.fragment`json_build_object(${
-                orderExpressions.length
-                  ? sql.join(
-                      orderExpressions.flatMap((expression) => [sql.literalValue(expression[0]), interpretFieldFragment(orderByType.parse(expression)[0])]),
-                      sql.fragment`,`
-                    )
-                  : sql.fragment``
-              }) cursorjson`);
         }
         if ((searchAfter || cursor) && orderExpressions?.length) {
             const orderByExpressions = orderExpressions.map(parsed => [interpretFieldFragment(orderByType.parse(parsed)[0]), parsed[1], parsed[0]] as const);
@@ -423,7 +442,7 @@ export function makeQueryLoader<
         ${typeof take === 'number' ? sql.fragment`LIMIT ${take}` : sql.fragment``}
         ${typeof skip === 'number' ? sql.fragment`OFFSET ${skip}` : sql.fragment``}
         `;
-        if (!select?.length && !selectGroups?.length) {
+        if (!select?.length && !selectGroups?.length && !fields.length) {
             finalKeys.push(sql.fragment`*`);
         }
         if (takeCursors && lateralExpressions?.length) {
