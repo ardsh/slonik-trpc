@@ -14,9 +14,6 @@ const Home: NextPage = () => {
             <main className="flex min-h-screen">
                 <div className="container flex flex-col justify-center px-4 py-2">
                     <employeeTableLoader.ContextProvider>
-                        <div className="flex">
-                            <EmployeesTable />
-                        </div>
                         <EmployeeList />
                     </employeeTableLoader.ContextProvider>
                 </div>

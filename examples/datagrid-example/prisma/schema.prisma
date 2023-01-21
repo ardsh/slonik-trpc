@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+    provider = "sqlite"
+    url      = "file:dev.db"
 }
 
 model Company {
@@ -12,7 +12,7 @@ model Company {
     id         Int      @id @default(autoincrement())
     name       String
     employees  EmployeeCompany[]
-    created_at DateTime @default(now()) @db.Timestamp(6)
+    created_at DateTime @default(now())
 }
 
 model EmployeeCompany {
@@ -21,11 +21,11 @@ model EmployeeCompany {
     company_id  Int
     employee    Employee @relation(fields: [employee_id], references: [id])
     company     Company  @relation(fields: [company_id], references: [id])
-    start_date  DateTime @db.Date
-    end_date    DateTime @db.Date
+    start_date  DateTime
+    end_date    DateTime
     department  String?
     job_title   String?
-    salary      Decimal? @db.Decimal
+    salary      Decimal?
 
     @@id([employee_id, company_id, start_date, end_date])
 }
@@ -37,5 +37,5 @@ model Employee {
     last_name  String
     email      String
     companies  EmployeeCompany[]
-    created_at DateTime @default(now()) @db.Timestamp(6)
+    created_at DateTime @default(now())
 }

@@ -12,11 +12,12 @@
         "lint:fix": "eslint src --fix --ext .js,.ts",
         "test": "jest --config jest.config.js --watch",
         "test:coverage": "jest --config jest.config.js --coverage",
+        "test:badge": "yarn test:coverage --coverageReporters='json-summary' && yarn make-coverage-badge && git add -f coverage/badge.svg",
         "prepare": "yarn build",
         "prepublishOnly": "yarn lint",
         "preversion": "yarn lint",
         "release": "yarn build && yarn changeset publish",
-        "version": "yarn format && git add -A src",
+        "version": "git config --global --bool --add push.autoSetupRemote true && (yarn test:badge || true) && yarn changeset version",
         "postversion": "git push && git push --tags"
     },
     "publishConfig": {
@@ -60,6 +61,7 @@
         "eslint-plugin-jest": "^27.0.4",
         "expect-type": "^0.15.0",
         "jest": "^29.0.3",
+        "make-coverage-badge": "^1.2.0",
         "prettier": "^2.7.1",
         "slonik": "^33.0.3",
         "slonik-interceptor-query-logging": "^1.4.7",

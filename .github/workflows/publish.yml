@@ -20,6 +20,20 @@ jobs:
         with:
           node-version: 16.x
 
+      - name: Start PostgreSQL on Ubuntu
+        run: |
+          sudo systemctl start postgresql.service
+          pg_isready
+  
+      - name: Create additional user
+        run: |
+          sudo -u postgres psql --command="CREATE USER testuser PASSWORD 'password'" --command="\du"
+
+      - name: Create additional database
+        run: |
+          sudo -u postgres createdb testdb --owner=testuser
+          PGPASSWORD=password
+
       - name: Install Dependencies
         run: yarn install
 
@@ -29,6 +43,11 @@ jobs:
         with:
           # This expects you to have a script called release which does a build for your packages and calls changeset publish
           publish: yarn release
+          # This expects you to have a script called version that runs some logic and then calls `changeset version`.
+          version: yarn run version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PGPASSWORD: password
+          PGUSER: testuser
+          PGDATABASE: testdb

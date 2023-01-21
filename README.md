@@ -1,10 +1,12 @@
 # slonik-trpc
 
-`slonik-trpc` is a simple utility for creating type-safe querying APIs with SQL queries, using [slonik](https://github.com/gajus/slonik) and [zod](https://github.com/colinhacks/zod).
+[![Version](https://img.shields.io/npm/v/slonik-trpc?color=success)](https://www.npmjs.com/package/slonik-trpc)
+![Coverage](coverage/badge.svg)
+![License](https://img.shields.io/npm/l/slonik-trpc)
 
-This can make API creation very easy and flexible, especially for [tRPC](https://github.com/trpc/trpc) queries, while remaining very efficient and secure, thanks to slonik and zod.
+`slonik-trpc` is a group of utilities for creating type-safe querying APIs with SQL queries, using [slonik](https://github.com/gajus/slonik) and [zod](https://github.com/colinhacks/zod). Its main purpose is to help bridge the gap between PostgreSQL, and your typesafe API, and serve as a proof of concept.
 
-You can think of it like a mini-[hasura](https://hasura.io/) for tRPC. It doesn't have nearly as many features as hasura, but it's great if all you need is the flexibility to run some SQL queries in a safe way, and automatically build an API with many features.
+You can think of it like [postgraphile](https://github.com/graphile/postgraphile) for tRPC, allowing you to build a blazing-fast [tRPC](https://github.com/trpc/trpc) querying API very quickly. Following the philosophy of allowing you to use [any SQL query as a relation](https://theartofpostgresql.com/blog/2019-09-the-r-in-orm).
 
 ## Features
 
@@ -12,7 +14,7 @@ You can think of it like a mini-[hasura](https://hasura.io/) for tRPC. It doesn'
   - [x] Automatic support for `AND`, `NOT`, `OR` in all the filters
   - [x] Ability to add [authorization filters](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/authorization) based on user auth context.
 - [x] [Select the fields](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/overfetching) you need, to avoid the overfetching problem.
-  - [x] Fully type-safe, only selected fields are returned in the types.
+  - [x] Fully type-safe, only selected fields are returned in the types. If no selects are specified, every field is returned.
 - [x] Runtime validation of input (completely safe against unsanitized inputs).
 - [x] Optional runtime validation of output (Your zod types can be executed against your result, including transforming the output fields easily with zod transformers).
 - [x] [Virtual field](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/virtual-columns) declaration in typescript (fully type-safe + with async support).
@@ -46,82 +48,87 @@ const query = sql.type(z.object({
 }))`SELECT id, name, email, created_at FROM users`;
 ```
 
-Now this can be used to create a type-safe API.
+This is enough to create a type-safe API
 
 ```ts
+import { makeQueryLoader } from 'slonik-trpc';
+
 const loader = makeQueryLoader({
     db: slonikConnection,
     query,
 });
 ```
+
+You can [plug this loader](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/trpc) into any tRPC query procedure, and it will provide an API for querying in the clientside.
+
+```ts
+getUsers: publicProcedure
+    .input(loader.getLoadArgs({
+        disabledFilters: {
+            // OR filters can be disabled on a public API
+            OR: true,
+        }
+    }))
+    .query(({ input, ctx }) => {
+        return loader.loadPagination({
+            ...input,
+            ctx,
+        });
+    }),
+```
+
+Now it can be called via tRPC:
+
+```ts
+const users = await client.getUsers.query({
+    select: ["id", "title", "content"], // Will query only these 3 columns, ignoring the rest
+    take: 25,
+    skip: 0,
+});
+```
+
+From here on, you only need to add more options to your loader, to make the API more thorough and customized to your needs. You have full control over what SQL is being executed, and can get the raw SQL query using `getQuery`.
 
 ### [Documentation](https://ardsh.github.io/slonik-trpc/)
 
 You can refer to [the documentation](https://ardsh.github.io/slonik-trpc/) for advanced use-cases and tutorials.
 
-### Overfetching
+### Custom queries
 
-You can specify which fields you'd like to query, and only those will be queried, to prevent overfetching.
-
-```ts
-const data = await slonik.query(loader.getQuery({
-    select: ["id", "name"]
-}));
-```
-
-You can also group columns together, to make selections easier
+Let's say you want to add a custom sub-query as a field to your relation.
+You can do this very easily.
 
 ```ts
-const loader = makeQueryLoader({
-    columnGroups: {
-        basic: ["id", "name"],
-    },
-    db: slonikConnection,
-    query,
-});
-const data = await slonik.query(loader.getQuery({
-    selectGroups: ["basic"], // Returns only id and name
-}));
+const query = sql.type(z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string(),
+    authoredPosts: z.number(),
+    created_at: z.string()
+}))`SELECT * FROM
+(SELECT *,
+    -- Count all the posts of the user as a number
+    (SELECT COUNT(*) FROM posts WHERE posts.author = users.id) AS "authoredPosts"
+FROM users
+) AS users`;
 ```
 
-### Usage with trpc
-
-To use it in trpc declare a query and pass the input.
-
-```ts
-loadUsers: publicProcedure
-    .input(loader.getLoadArgs())
-    .query(({ ctx, input }) => {
-        return loader.loadPagination({
-            ...input,
-            ctx,
-        });
-    })
-```
-
-You don't have to use loadPagination/load if you're using `getQuery`, and can execute the query yourself. The returned query data will still be type-safe.
-
-```ts
-.query(({ input, ctx }) => {
-    return slonik.query(loader.getQuery({
-        ...input,
-        ctx,
-    }));
-}),
-```
+Note this sub-query will be called only when the authoredPosts is a selected field. Otherwise the database won't execute it, ensuring optimal performance.
 
 ### Filtering
 
 ```ts
-import { createFilters, booleanFilter, arrayFilter, dateFilter } from 'slonik-trpc/utils';
+import { createFilters, booleanFilter, arrayFilter, dateFilter, genericFilter } from 'slonik-trpc/utils';
 
 const filters = createFilters<Context>()({
     // Specify the filter input types with zod types
-    id: z.union([z.string(), z.array(z.string())]),
+    ids: z.union([z.string(), z.array(z.string())]),
     createdDate: z.object({
         _gt: z.string(),
         _lt: z.string(),
     }),
+    // Whether the user has more than N posts
+    postsCount: z.number(),
     name: z.string(),
     isGmail: z.boolean(),
     // Then the interpreter functions for each filter
@@ -130,11 +137,14 @@ const filters = createFilters<Context>()({
     // If isGmail: true, return emails that end in gmail.com. If isGmail: false, return only non-gmail emails.
     isGmail: (value) => booleanFilter(value, sql.fragment`email ILIKE '%gmail.com'`),
     // Returns only ids in the array, if any elements are specified.
-    id: (value) => arrayFilter(value, sql.fragment`users.id`),
+    ids: (value) => arrayFilter(value, sql.fragment`users.id`),
+    // Using the previously declared sub-query
+    postsCount: value => genericFilter(value, sql.fragment`"authoredPosts" > ${value}`),
     createdDate: (value) => dateFilter(value, sql.fragment`users.created_at`),
 })
 
 const loader = makeQueryLoader({
+    db,
     query,
     filters,
 });
@@ -142,7 +152,7 @@ const loader = makeQueryLoader({
 
 `arrayFilter`, `dateFilter`, and `booleanFilter` are small utilities that can be used to build sql fragments for common filters.
 
-These filters can then be used when calling the API. `AND`, `OR` and `NOT` filters are added automatically, to allow more complex conditions.
+These filters can then be used when calling the API. `AND`, `OR` and `NOT` filters are added automatically, to allow more complex combinations.
 
 ```ts
 const specificUsers = await filtersLoader.load({
@@ -158,10 +168,18 @@ const specificUsers = await filtersLoader.load({
         }, {
             // or non-gmail users.
             isGmail: false,
+        }, {
+            // Or with less than 20 posts (by inverting the postsCount greater than filter)
+            NOT: {
+                postsCount: 20,
+            }
         }]
     }
 });
 ```
+
+As you can see, the filter creation is very easy, yet it offers very powerful, flexible and type-safe filters, giving you complete control over the resulting API that is created.
+You can look at the [implementation of some filter utils for inspiration](https://github.com/ardsh/slonik-trpc/blob/main/src/helpers/sqlUtils.ts)
 
 ### Authorization
 
@@ -298,6 +316,47 @@ const virtualFieldsLoader = makeQueryLoader({
 
 The virtual fields can then be selected like normal fields.
 
+### Nested arrays and objects
+
+You can use PostgreSQL functions for creating json arrays and objects in your query. Two such utils are exposed for convenience through `rowToJson` and `rowsToArray`.
+
+```ts
+import { rowToJson, rowsToArray } from 'slonik-trpc/utils';
+
+const query = sql.type(z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string(),
+    contactInfo: z.object({
+        phoneNumber: z.string(),
+        zip: z.string(),
+        address: z.string(),
+    }),
+    posts: z.array(z.object({
+        text: z.string(),
+        title: z.string(),
+    })),
+}))`SELECT
+    users.id,
+    name,
+    email,
+    ${rowToJson(sql.fragment`
+        SELECT "phoneNumber", "zip", "address"
+        WHERE contact_info.id IS NOT NULL
+    `, 'contactInfo')}
+    ${rowsToArray(sql.fragment`
+        SELECT text, title`, sql.fragment`
+        FROM posts
+        WHERE posts.author = users.id`,
+        'posts'
+    )}
+FROM users
+LEFT JOIN contact_info
+ON contact_info.id = users.contact_info`;
+```
+
+If you wanna prevent conflicts of field names when joining multiple tables, it's recommended to wrap the whole query in a `SELECT * FROM (subQuery) alias`, which has the effect of returning only a single view, thus making conflicts impossible.
+
 Refer to the [minimal-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc), or [datagrid-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/datagrid-example) for more complete examples.
 
 ## FAQ
@@ -410,20 +469,20 @@ const getPosts = <TArgs extends InferArgs<PostLoader>>(args: TArgs) => {
 }
 ```
 
-Or with hooks + loadPagination and a useful type annotation to replace the pagination `edges` key easily.
+Or with hooks + loadPagination and a useful type annotation to replace the pagination `nodes` key easily.
 
 ```ts
 import type { InferArgs, InferPayload, Post } from '../../server';
 
-type ReplaceEdges<TResult, TPayload> = TResult extends { edges?: ArrayLike<any>, hasNextPage?: boolean } ? Omit<TResult, "edges"> & {
-    edges: TPayload[]
+type ReplaceNodes<TResult, TPayload> = TResult extends { nodes?: ArrayLike<any>, hasNextPage?: boolean } ? Omit<TResult, "nodes"> & {
+    nodes: TPayload[]
 } : TResult extends object ? {
-    [K in keyof TResult]: ReplaceEdges<TResult[K], TPayload>
+    [K in keyof TResult]: ReplaceNodes<TResult[K], TPayload>
 } : TResult;
 
 const getPosts = <TArgs extends InferArgs<PostLoader>>(args: TArgs) => {
     const result = trpc.loadPosts.useQuery(args);
-    return result as ReplaceEdges<typeof result, InferPayload<PostLoader, TArgs>>;
+    return result as ReplaceNodes<typeof result, InferPayload<PostLoader, TArgs>>;
 }
 ```
 

@@ -106,7 +106,7 @@ export const  createTableLoader = <TPayload  extends  Record<string, any>>() => 
       return getPaginationProps;
     },
     useUpdateQueryData: (data?: {
-      edges?: readonly TPayload[] | null,
+      nodes?: readonly TPayload[] | null,
       pageInfo?: {
         hasNextPage?: boolean,
         hasPreviousPage?: boolean,

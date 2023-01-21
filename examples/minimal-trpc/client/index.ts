@@ -18,14 +18,14 @@ const client = createTRPCProxyClient<AppRouter>({
     ],
 });
 
-type ReplaceEdges<TResult, TPayload> = TResult extends { edges?: ArrayLike<any>, hasNextPage?: boolean } ? Omit<TResult, "edges"> & {
-    edges: TPayload[]
+type ReplaceNodes<TResult, TPayload> = TResult extends { nodes?: ArrayLike<any>, hasNextPage?: boolean } ? Omit<TResult, "nodes"> & {
+    nodes: TPayload[]
 } : TResult extends object ? {
-    [K in keyof TResult]: ReplaceEdges<TResult[K], TPayload>
+    [K in keyof TResult]: ReplaceNodes<TResult[K], TPayload>
 } : TResult;
 
 const getPosts = <TArgs extends InferArgs<PostLoader>>(args: TArgs) => {
-    return client.loadPosts.query(args).then(data => data as ReplaceEdges<typeof data, InferPayload<PostLoader, TArgs>>);
+    return client.loadPosts.query(args).then(data => data as ReplaceNodes<typeof data, InferPayload<PostLoader, TArgs>>);
 }
 
 async function main() {
@@ -36,7 +36,7 @@ async function main() {
     });
 
     console.log(
-        posts.edges.map((post) => ({
+        posts.nodes.map((post) => ({
             ...post,
             id: post.id,
             // @ts-expect-error fullName is not selected
@@ -66,7 +66,7 @@ async function main() {
         take: 1,
     });
     console.log("Post after may 1st")
-    console.log(cursorPagination.edges[0]);
+    console.log(cursorPagination.nodes[0]);
 }
 
 main();

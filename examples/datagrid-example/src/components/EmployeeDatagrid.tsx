@@ -183,7 +183,7 @@ export default function QuickFilteringGrid() {
     return (
         <div className="min-h-screen min-w-full">
             <DataGrid
-                rows={data?.edges || []}
+                rows={data?.nodes || []}
                 disableColumnFilter
                 disableColumnSelector
                 disableDensitySelector

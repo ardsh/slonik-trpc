@@ -33,7 +33,7 @@ const CursorPagination: React.FC<CursorPaginationProps> = ({
     const nextDisabled = hasNextPage === false;
     const previousDisabled = hasPreviousPage === false;
     return (
-        <ul>
+        <ul className='select-none'>
             <li className='inline m-2 pointer border shadow-md p-1' title="First Page">
                 <a onClick={previousDisabled ? undefined : onFirstPage}>&laquo;&laquo;</a>
             </li>
@@ -50,7 +50,7 @@ const CursorPagination: React.FC<CursorPaginationProps> = ({
                 <a onClick={nextDisabled ? undefined : onLastPage}>&raquo;&raquo;</a>
             </li>
             <li className='inline'>
-                <select
+                <select defaultValue={25}
                     onChange={(e: any) => { onPageSizeChange?.(parseInt(e?.target?.value || e, 10)) }}>
                     {(pageSizeOptions || defaultPageSizes).map(size => (
                         <option

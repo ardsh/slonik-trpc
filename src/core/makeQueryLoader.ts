@@ -424,7 +424,7 @@ export function makeQueryLoader<
                         if (innerIndex === expressions.length - 1) {
                             operator = direction === (reverse ? "DESC" : "ASC")
                                 ? sql.fragment`>` : sql.fragment`<`;
-                            if (value === null || value === undefined) {
+                            if (value === null) {
                                 nullFragment = sql.fragment`${expression} IS NULL`;
                             }
                         }
@@ -663,9 +663,9 @@ export function makeQueryLoader<
             debug(finalQuery.sql);
             return db
                 .any(finalQuery)
-                .then(async (edges) => {
-                    const slicedEdges = edges.slice(0, take || undefined);
-                    const rows = reverse === -1 ? slicedEdges.reverse() as never : slicedEdges;
+                .then(async (nodes) => {
+                    const slicedNodes = nodes.slice(0, take || undefined);
+                    const rows = reverse === -1 ? slicedNodes.reverse() as never : slicedNodes;
                     const cursors = args.takeCursors && {
                         startCursor: toCursor((rows[0] as any)?.[cursorColumns]),
                         endCursor: toCursor((rows[rows.length - 1] as any)?.[cursorColumns]),
@@ -678,17 +678,17 @@ export function makeQueryLoader<
                             return null;
                         }),
                     };
-                    const hasMore = edges.length > slicedEdges.length;
+                    const hasMore = nodes.length > slicedNodes.length;
                     const hasPrevious = !!args.skip || (!!args.cursor || !!args.searchAfter);
                     return {
-                        edges: await mapTransformRows(rows, args.select, args.ctx),
+                        nodes: await mapTransformRows(rows, args.select, args.ctx),
                         ...(cursors && {
                             cursors: cursors.cursors
                         }),
                         pageInfo: {
                             hasPreviousPage: reverse === -1 ? hasMore : hasPrevious,
                             hasNextPage: reverse === -1 ? hasPrevious : hasMore,
-                            minimumCount: (args.skip || 0) + edges.length,
+                            minimumCount: (args.skip || 0) + nodes.length,
                             ...(cursors && {
                                 startCursor: cursors.startCursor,
                                 endCursor: cursors.endCursor,

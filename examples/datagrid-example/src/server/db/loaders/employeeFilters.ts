@@ -12,11 +12,11 @@ export const nameFilter = (filter: string[] | string | undefined, firstNameField
         if (tokens.length === 2 || tokens.length === 3) {
             // If just 2 or 3 tokens, try all fullName combinations
             const combinations = tokens.flatMap((el, i) => tokens.filter((t, j) => j !== i).map(o => [el, o]));
-            const conditions = combinations.map(([firstName, lastName]) => sql.fragment`${firstNameField} ILIKE ${'%' + firstName + '%'} AND ${lastNameField} ILIKE ${'%' + lastName + '%'}`);
+            const conditions = combinations.map(([firstName, lastName]) => sql.fragment`${firstNameField} LIKE ${'%' + firstName + '%'} AND ${lastNameField} LIKE ${'%' + lastName + '%'}`);
             return sql.fragment`(${sql.join(conditions, sql.fragment`) OR (`)})`;
         }
         const conditions = tokens.map(
-            (token) => sql.fragment`(${firstNameField} || ${lastNameField} ILIKE ${'%' + token + '%'})`
+            (token) => sql.fragment`(${firstNameField} || ${lastNameField} LIKE ${'%' + token + '%'})`
         );
         if (conditions.length) {
             return sql.fragment`(${sql.join(conditions, sql.fragment`) OR (`)})`;
@@ -29,7 +29,7 @@ export const employeeFilters = createFilters<Context>()({
     employeeName: arrayStringFilterType,
 }, {
     employeeId: (value) => arrayFilter(value, sql.fragment`employees.id`),
-    // Custom SQL filter that tries to fuzzy match with ILIKE
+    // Custom SQL filter that tries to fuzzy match with LIKE
     employeeName: value => nameFilter(value, sql.fragment`employees.first_name`, sql.fragment`employees.last_name`),
 }, {
     postprocess(conditions, filters, context) {

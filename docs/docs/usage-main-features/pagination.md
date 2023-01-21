@@ -19,13 +19,15 @@ This will return an object with the following shape:
 
 ```json
 {
-    "edges": [{
+    "nodes": [{
         // ...posts array with 50 items.
     }],
-    "hasNextPage": true,
-    // Letting you know there's an extra page, because at least 76 items were loaded (75 skipped + 50 take + 1)
-    "minimumCount": 126,
-    "count": null,
+    "pageInfo": {
+        "hasNextPage": true,
+        // Letting you know there's an extra page, because at least 76 items were loaded (75 skipped + 50 take + 1)
+        "minimumCount": 126,
+        "count": null,
+    }
 }
 ```
 
@@ -45,13 +47,16 @@ This may return an object with the following shape:
 
 ```json
 {
-    "edges": [{
+    "nodes": [{
         // ...posts array with 25 items.
     }],
-    "hasNextPage": true,
-    // Letting you know there's an extra page, because at least 76 items were loaded (50 skipped + 25 take + 1)
-    "minimumCount": 76,
-    "count": 443,
+    "pageInfo": {
+        "hasNextPage": true,
+        "hasPreviousPage": true,
+        // Letting you know there's an extra page, because at least 76 items were loaded (50 skipped + 25 take + 1)
+        "minimumCount": 76,
+        "count": 443,
+    }
 }
 ```
 

@@ -3,24 +3,29 @@ import { sql } from 'slonik';
 import { makeQueryLoader } from 'slonik-trpc';
 import { mergeFilters } from 'slonik-trpc/utils';
 import { db } from '../slonik';
+import { prisma } from '../client'
 import { companyFilters, employeeCompaniesFilters, employeeFilters } from './employeeFilters';
 
 export const employee = z.object({
     id: z.number(),
+    employee_id: z.number(),
     firstName: z.string(),
     lastName: z.string(),
-    salary: z.number(),
+    salary: z.any().transform(a => a?.toString?.()),
     company: z.string(),
-    startDate: z.string(),
-    endDate: z.string(),
+    employed_days: z.union([z.number(), z.bigint()]).transform(a => a.toString()),
+    startDate: z.date().transform(a => a.toISOString().slice(0,10)),
+    endDate: z.date().transform(a => a.toISOString().slice(0,10)),
 });
 const query = sql.type(employee)`
 SELECT
     employees.id,
+    employees.id AS employee_id,
     employees.first_name AS "firstName",
     employees.last_name AS "lastName",
     employee_companies.salary,
     companies.name AS company,
+    (end_date - start_date) / 86400 / 1000 AS employed_days,
     employee_companies.start_date AS "startDate",
     employee_companies.end_date AS "endDate"
 FROM employees
@@ -37,14 +42,23 @@ export type EmployeeLoader = typeof employeeLoader;
 
 export const employeeLoader = makeQueryLoader({
     query,
-    db,
+    options: {
+        useSqlite: true,
+        runtimeCheck: true,
+    },
+    db: {
+        any: (sql) => {
+            return prisma.$queryRawUnsafe(sql.sql, ...sql.values);
+        }
+    },
     sortableColumns: {
-        id: sql.fragment`employees.id`,
-        name: sql.fragment`employees.first_name || employees.last_name`,
-        startDate: ["employee_companies", "start_date"],
-        endDate: ["employee_companies", "end_date"],
+        id: "employee_id",
+        name: sql.fragment`"firstName" || "lastName"`,
+        daysEmployed: "employed_days",
+        startDate: "start_date",
+        endDate: "end_date",
         salary: "salary",
-        company: ["companies", "name"],
+        company: "name",
     },
     filters: mergeFilters([employeeFilters, employeeCompaniesFilters, companyFilters]),
     virtualFields: {
