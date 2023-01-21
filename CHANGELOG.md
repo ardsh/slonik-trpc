@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.9.0
+
+### Minor Changes
+
+-   636d400: BREAKING CHANGE: Renamed `edges` to `nodes` in `loadPagination` result
+
 ## 0.8.3
 
 ### Patch Changes
