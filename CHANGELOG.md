@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.9.1
+
+### Patch Changes
+
+-   19cbf89: Added constraints option for authorization
+
 ## 0.9.0
 
 ### Minor Changes
