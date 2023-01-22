@@ -35,6 +35,10 @@ Zod 3+
 yarn add slonik-trpc
 ```
 
+### Demo
+
+Here's a [demo](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datagrid-example) example table in codesandbox, that utilizes a SQLite-compatible mode for generating the queries.
+
 ## Usage
 
 Declare the query as you would normally with slonik.
@@ -183,22 +187,27 @@ You can look at the [implementation of some filter utils for inspiration](https:
 
 ### Authorization
 
-For authorization checks, use the postprocess filter option to add hardcoded conditions to the query, based on the context.
+For authorization checks, use the `constraints` option to add hardcoded conditions to the query, based on the context.
 
 ```ts
-const filters = createFilters<Context>()({
-    ...filters
-}, {
-    ...interpreters
-}, {
-    postprocess(conditions, filters, ctx) {
-        // Using postprocessing of filters to add an authorization check
-        conditions.push(sql.fragment`users.id=${ctx.userId}`);
-        // All conditions are joined with AND
-        return conditions;
-    },
-})
+const userLoader = makeQueryLoader({
+    db,
+    query,
+    filters,
+    constraints(ctx) {
+        if (ctx.role === 'ADMIN') {
+            // Allow admins to query anyone by returning no extra permission rules.
+            return null;
+        } else {
+            // Only allow querying the users in the same org as the logged in user
+            return sql.fragment`users.org_id=${ctx.orgId}`;
+        }
+    }
+});
 ```
+
+Constraints are like hardcoded filters that are always applied.
+Any kind of SQL condition will do, and you can also return an array of multiple conditions, they will be joined with `AND`.
 
 #### Postprocessing columns
 
@@ -357,7 +366,7 @@ ON contact_info.id = users.contact_info`;
 
 If you wanna prevent conflicts of field names when joining multiple tables, it's recommended to wrap the whole query in a `SELECT * FROM (subQuery) alias`, which has the effect of returning only a single view, thus making conflicts impossible.
 
-Refer to the [minimal-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc), or [datagrid-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/datagrid-example) for more complete examples.
+Refer to the [minimal-example](https://stackblitz.com/github/ardsh/slonik-trpc/tree/main/examples/minimal-trpc), or [datagrid-example](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datagrid-example) for more complete examples.
 
 ## FAQ
 
@@ -511,7 +520,8 @@ yarn test
 - Automatically syncing the zod types with sql, using something like [@slonik/typegen](https://github.com/mmkal/slonik-tools/tree/main/packages/typegen)
 - Wildcards in selects, e.g. `select: ["name*"]` to select all fields that start with name.
 - Custom loaders and/or plugins/middlewares for processing query results.
-- Integration with [prisma client raw database access](https://www.prisma.io/docs/concepts/components/prisma-client/raw-database-access), and other DB clients, separating data loading from query composition.
+- Mutations, through an update API builder.
+- ~~Integration with [prisma client raw database access](https://www.prisma.io/docs/concepts/components/prisma-client/raw-database-access), and other DB clients, separating data loading from query composition.~~ Done.
 
 ## 📝 License
 

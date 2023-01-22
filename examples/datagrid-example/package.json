@@ -27,6 +27,7 @@
         "slonik": "^33.0.4",
         "slonik-trpc": "^0.9.0",
         "superjson": "1.9.1",
+        "tailwind-merge": "^1.8.1",
         "zod": "^3.19.1"
     },
     "devDependencies": {

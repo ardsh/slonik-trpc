@@ -1,0 +1,8 @@
+{
+  "label": "Client-side patterns",
+  "position": 6,
+  "link": {
+    "type": "generated-index",
+    "description": "Patterns for calling tRPC queries from react."
+  }
+}

@@ -195,6 +195,23 @@ export function makeQueryLoader<
         options?: FilterOptions<TFilterTypes, z.infer<TContextZod>>
     }
     /**
+     * You can add any hardcoded conditions here, to be used for authorization.  
+     * Any conditions you return will be appended to the overall AND conditions, and cannot be bypassed.
+     * 
+     * E.g.
+     * 
+     * ```ts
+     * constraints(ctx) {
+     *   if (!ctx.userId) return sql.fragment`FALSE`; // Disable querying for unknown users.
+     * 
+     *   return sql.fragment`posts.author=${ctx.userId}`;
+     * }
+     * ```
+     * 
+     * This will let users query only their own posts, if the posts table is in the query.
+     * */
+    constraints?: (ctx: z.infer<TContextZod>) => SqlFragment | SqlFragment[] | null | undefined,
+    /**
      * Specify aliases for sortable columns. Can either be a single column, or a tuple of table name + column.
      * E.g.
      * ```ts
@@ -335,7 +352,14 @@ export function makeQueryLoader<
         TGroupSelected,
         TTakeCursors
     >) => {
-        const whereCondition = interpretFilters?.(where || ({} as any), ctx ? options.contextParser?.parse(ctx) ?? ctx : ctx);
+        const context = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
+        const filtersCondition = interpretFilters?.(where || ({} as any), context);
+        const authConditions = options?.constraints?.(context);
+        const auth = Array.isArray(authConditions) ? authConditions : [authConditions].filter(notEmpty);
+        const whereCondition = auth.length ? sql.fragment`(${sql.join(
+            [...auth, filtersCondition].filter(notEmpty),
+            sql.fragment`) AND (`
+        )})` : filtersCondition;
         let actualQuery = query;
         if (selectGroups?.length) {
             const groupFields = selectGroups.flatMap(group => options.columnGroups?.[group] || []);

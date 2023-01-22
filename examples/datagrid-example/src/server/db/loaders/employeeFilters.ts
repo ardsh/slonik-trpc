@@ -12,11 +12,11 @@ export const nameFilter = (filter: string[] | string | undefined, firstNameField
         if (tokens.length === 2 || tokens.length === 3) {
             // If just 2 or 3 tokens, try all fullName combinations
             const combinations = tokens.flatMap((el, i) => tokens.filter((t, j) => j !== i).map(o => [el, o]));
-            const conditions = combinations.map(([firstName, lastName]) => sql.fragment`${firstNameField} LIKE ${'%' + firstName + '%'} AND ${lastNameField} LIKE ${'%' + lastName + '%'}`);
+            const conditions = combinations.map(([firstName, lastName]) => sql.fragment`UPPER(${firstNameField}) LIKE ${'%' + firstName?.toUpperCase() + '%'} AND UPPER(${lastNameField}) LIKE ${'%' + lastName?.toUpperCase() + '%'}`);
             return sql.fragment`(${sql.join(conditions, sql.fragment`) OR (`)})`;
         }
         const conditions = tokens.map(
-            (token) => sql.fragment`(${firstNameField} || ${lastNameField} LIKE ${'%' + token + '%'})`
+            (token) => sql.fragment`(UPPER(${firstNameField} || ${lastNameField}) LIKE ${'%' + token.toUpperCase() + '%'})`
         );
         if (conditions.length) {
             return sql.fragment`(${sql.join(conditions, sql.fragment`) OR (`)})`;
@@ -30,13 +30,13 @@ export const employeeFilters = createFilters<Context>()({
 }, {
     employeeId: (value) => arrayFilter(value, sql.fragment`employees.id`),
     // Custom SQL filter that tries to fuzzy match with LIKE
-    employeeName: value => nameFilter(value, sql.fragment`employees.first_name`, sql.fragment`employees.last_name`),
+    employeeName: value => nameFilter(value, sql.fragment`employees."firstName"`, sql.fragment`employees."lastName"`),
 }, {
     postprocess(conditions, filters, context) {
         // Usually you can add something like this, to disable querying companies a user doesn't have permission to.
         // conditions.push(sql.fragment`companies.id=ANY(${sql.array(context.userInfo.companies)})`)
         if (!context.userInfo.id) {
-            // Disable filtering entirely if unauthorized...
+            // Disable API entirely if unauthorized...
             conditions.push(sql.fragment`FALSE`);
         }
         return conditions;
@@ -46,7 +46,7 @@ export const employeeFilters = createFilters<Context>()({
 export const companyFilters = createFilters<Context>()({
     companyId: arrayStringFilterType,
 }, {
-    companyId: value => arrayFilter(value, sql.fragment`companies.id`),
+    companyId: value => arrayFilter(value, sql.fragment`company_id`),
 });
 
 export const employeeCompaniesFilters = createFilters<Context>()({
@@ -57,7 +57,7 @@ export const employeeCompaniesFilters = createFilters<Context>()({
         _lt: z.number(),
     }).partial(),
 }, {
-    employmentSalary: value => dateFilter(value as any, sql.fragment`employee_companies.salary`),
-    employmentStartDate: value => dateFilter(value, sql.fragment`employee_companies.start_date`),
-    employmentEndDate: value => dateFilter(value, sql.fragment`employee_companies.end_date`),
+    employmentSalary: value => dateFilter(value as any, sql.fragment`"salary"`),
+    employmentStartDate: value => dateFilter(value, sql.fragment`"startDate"`),
+    employmentEndDate: value => dateFilter(value, sql.fragment`"endDate"`),
 });

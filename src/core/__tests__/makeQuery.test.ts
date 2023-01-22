@@ -420,6 +420,9 @@ describe("withQueryLoader", () => {
     const genericOptions = createOptions({
         db,
         query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+        constraints() {
+            return sql.fragment`TRUE`;
+        },
         columnGroups: {
             ids: ["id", "uid"],
             values: ["id", "dummyField"],
@@ -1784,5 +1787,48 @@ describe("withQueryLoader", () => {
         expectTypeOf(data[0]).toEqualTypeOf<InferPayload<typeof loader, {
             select: typeof a.select | ["value"],
         }>>();
+    });
+
+    it("Authorization function gets called with context and returns a sql fragment", async () => {
+        const spy = jest.fn();
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            constraints(ctx) {
+                spy(ctx);
+                if (!ctx?.userId) return sql.fragment`FALSE`;
+            },
+        });
+
+        const data = await loader.load({
+            take: 1,
+            ctx: 3,
+        });
+
+        expect(spy).toHaveBeenCalledWith(3);
+        expect(data).toEqual([]);
+        const query = loader.getQuery({
+            take: 1,
+            where: {
+                OR: [{
+                    largeIds: true,
+                }, {
+                    id: 3
+                }]
+            }
+        });
+        expect(query.sql).toContain("WHERE ((FALSE) AND");
+    });
+
+    it("Authorization function returns array of fragments", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            constraints(ctx) {
+                return [sql.fragment`TRUE`, sql.fragment`TRUE`];
+            },
+        });
+        const query = loader.getQuery({
+            take: 1,
+        });
+        expect(query.sql).toContain("WHERE ((TRUE) AND (TRUE)");
     });
 });

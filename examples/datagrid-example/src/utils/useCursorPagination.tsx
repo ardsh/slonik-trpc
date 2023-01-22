@@ -12,7 +12,7 @@ export const initialCursorPagination: CursorPagination = {
     startCursor: '',
     endCursor: '',
     reverse: false,
-    pageSize: 25,
+    pageSize: 10,
 }
 
 export type CursorPaginationAction = {
@@ -178,7 +178,7 @@ export function useCursorPaginationProps(props: CursorPaginationProps) {
         ...actions,
     }), [actions, pagination]);
 
-    const { currentCursor, pageSize = 25, reverse } = pagination;
+    const { currentCursor, pageSize = 10, reverse } = pagination;
     const getPaginationVariables = React.useCallback(() => ({
         take: reverse ? -pageSize : pageSize,
         takeCursors: true,

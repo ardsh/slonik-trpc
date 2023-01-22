@@ -88,7 +88,7 @@ expectTypeOf(allFieldsData[0]).toEqualTypeOf<{ age: number, fullName: string }>(
 
 const testContext = z.object({
     userId: z.string(),
-})
+}).nullish();
 type TestContext = z.infer<typeof testContext>;
 
 const filters = createFilters<TestContext>()({

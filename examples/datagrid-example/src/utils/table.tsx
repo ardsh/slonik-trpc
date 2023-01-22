@@ -77,7 +77,7 @@ export const  createTableLoader = <TPayload  extends  Record<string, any>>() => 
     },
     useVariables: () => {
       const dependencies = React.useContext(DependenciesContext);
-      const { currentCursor, pageSize = 25, reverse } = React.useContext(PaginationContext);
+      const { currentCursor, pageSize = 10, reverse } = React.useContext(PaginationContext);
 
       return React.useMemo(() => ({
         select: dependencies,

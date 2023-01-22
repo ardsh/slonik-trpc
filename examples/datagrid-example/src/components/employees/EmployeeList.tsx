@@ -80,15 +80,18 @@ export default function EmployeeList() {
   const theme = useTheme(materialTheme);
   const getPaginationProps = employeeTableLoader.usePaginationProps();
 
+  const paginationProps = getPaginationProps();
 
   const handleSearch = (event: any) => {
     setSearch(event.target.value);
+    paginationProps.onFirstPage();
   };
 
   const sort = useSort(
     data as any,
     {
       onChange: (action: any, state: any) => {
+        paginationProps.onFirstPage();
         setOrderBy([state.sortKey, state.reverse ? "DESC" : "ASC"]);
       },
     }, {

@@ -1,5 +1,5 @@
 import React from 'react';
-
+import { twMerge } from 'tailwind-merge';
 
 interface CursorPaginationProps {
     pageSize?: number | string;
@@ -34,26 +34,27 @@ const CursorPagination: React.FC<CursorPaginationProps> = ({
     const previousDisabled = hasPreviousPage === false;
     return (
         <ul className='select-none'>
-            <li className='inline m-2 pointer border shadow-md p-1' title="First Page">
-                <a onClick={previousDisabled ? undefined : onFirstPage}>&laquo;&laquo;</a>
+            <li className={twMerge('inline m-2 rounded-md text-white bg-blue-500 hover:bg-blue-600 cursor-pointer', previousDisabled && 'bg-gray-400 hover:bg-gray-600')} title="First Page">
+                <a className='p-2' onClick={previousDisabled ? undefined : onFirstPage}>&laquo;&laquo;</a>
             </li>
-            <li className='inline m-2 pointer border shadow-md p-1' title="Previous Page">
-                <a onClick={previousDisabled ? undefined : onPrevious}>&laquo;</a>
+            <li className={twMerge('inline rounded-md text-white bg-blue-500 hover:bg-blue-600 cursor-pointer', previousDisabled && 'bg-gray-400 hover:bg-gray-600')} title="Previous Page">
+                <a className='p-2' onClick={previousDisabled ? undefined : onPrevious}>&laquo;</a>
             </li>
             {currentPage && <li className='inline m-2' title="Current Page">
                 {currentPage}
             </li>}
-            <li className='inline m-2 pointer border shadow-md p-1' title="Next Page">
-                <a onClick={nextDisabled ? undefined : onNext}>&raquo;</a>
+            <li className={twMerge('inline rounded-md text-white bg-blue-500 hover:bg-blue-600 cursor-pointer', nextDisabled && 'bg-gray-400 hover:bg-gray-600')} title="Next Page">
+                <a className='p-2' onClick={nextDisabled ? undefined : onNext}>&raquo;</a>
             </li>
-            <li className='inline m-2 pointer border shadow-md p-1' title="Last Page">
-                <a onClick={nextDisabled ? undefined : onLastPage}>&raquo;&raquo;</a>
+            <li className={twMerge('inline m-2 rounded-md text-white bg-blue-500 hover:bg-blue-600 cursor-pointer', nextDisabled && 'bg-gray-400 hover:bg-gray-600')} title="Last Page">
+                <a className='p-2' onClick={nextDisabled ? undefined : onLastPage}>&raquo;&raquo;</a>
             </li>
             <li className='inline'>
-                <select defaultValue={25}
+                <select defaultValue={10}
                     onChange={(e: any) => { onPageSizeChange?.(parseInt(e?.target?.value || e, 10)) }}>
                     {(pageSizeOptions || defaultPageSizes).map(size => (
                         <option
+                            className='text-black bg-blue-200'
                             key={size}
                             value={size}>
                             {size} / page
