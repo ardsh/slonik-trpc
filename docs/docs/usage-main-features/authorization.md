@@ -4,35 +4,34 @@ sidebar_position: 8
 
 # Authorization
 
-Filters can be used for the authorization logic of the loader. Use the postprocess filter option to add hardcoded conditions to the query, based on the context.
+The constraints option can be used for the authorization logic of the loader.
+Use it to add hardcoded conditions to the query, based on the context.
 
 ```ts
-const filters = createFilters<Context>()({
-    ...filters,
-}, {
-    ...interpreters,
-}, {
-    postprocess(conditions, filters, ctx) {
-        return [
-            ...conditions,
-            // All conditions are joined with AND
-            sql.fragment`users.id=${ctx.userId}`,
-        ];
-    },
-})
+
+const userLoader = makeQueryLoader({
+    db,
+    query,
+    filters,
+    constraints(ctx) {
+        if (ctx.role === 'ADMIN') {
+            // Allow admins to query anyone by returning no extra permission rules.
+            return null;
+        } else {
+            // Only allow querying the users in the same org as the logged in user
+            return sql.fragment`users.org_id=${ctx.orgId}`;
+        }
+    }
+});
 ```
 
-This results in an additional condition being added to each query.
-So the above example query SQL becomes
+This results in an additional condition being added to each query, if the ctx.role is not `ADMIN`. If it is an admin, no extra constraints are added.
+
+So when a user tries to filter gmail users only, the query SQL would be:
 
 ```sql
 WHERE (NOT(email ILIKE '%gmail.com'))
-AND (users.id=$1)
+AND (users.org_id=$1)
 ```
 
-The postprocessing of filters is executed every time at the end of the interpretation.
-
-:::danger
-You should always return the input conditions array, and other extra conditions you want.
-Excluding conditions means they won't get applied. However, if you return null or undefined, or forget to return a value, the original conditions will be applied.
-:::
+And they wouldn't be able to see any users outside their organization.

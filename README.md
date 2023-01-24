@@ -4,9 +4,9 @@
 ![Coverage](coverage/badge.svg)
 ![License](https://img.shields.io/npm/l/slonik-trpc)
 
-`slonik-trpc` is a group of utilities for creating type-safe querying APIs with SQL queries, using [slonik](https://github.com/gajus/slonik) and [zod](https://github.com/colinhacks/zod). Its main purpose is to help bridge the gap between PostgreSQL, and your typesafe API, and serve as a proof of concept.
+`slonik-trpc` is a group of utilities for creating type-safe querying APIs with SQL queries, using [slonik](https://github.com/gajus/slonik) and [zod](https://github.com/colinhacks/zod). Its main purpose is to help bridge the gap between PostgreSQL, and your typesafe API, a proof of concept of how pure SQL can be made type-safe.
 
-You can think of it like [postgraphile](https://github.com/graphile/postgraphile) for tRPC, allowing you to build a blazing-fast [tRPC](https://github.com/trpc/trpc) querying API very quickly. Following the philosophy of allowing you to use [any SQL query as a relation](https://theartofpostgresql.com/blog/2019-09-the-r-in-orm).
+You can think of it like [postgraphile](https://github.com/graphile/postgraphile) for tRPC, allowing you to build a blazing-fast [tRPC](https://github.com/trpc/trpc) querying API very quickly. It follows the philosophy of allowing you to use [any SQL query as a relation](https://theartofpostgresql.com/blog/2019-09-the-r-in-orm).
 
 ## Features
 
@@ -16,7 +16,7 @@ You can think of it like [postgraphile](https://github.com/graphile/postgraphile
 - [x] [Select the fields](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/overfetching) you need, to avoid the overfetching problem.
   - [x] Fully type-safe, only selected fields are returned in the types. If no selects are specified, every field is returned.
 - [x] Runtime validation of input (completely safe against unsanitized inputs).
-- [x] Optional runtime validation of output (Your zod types can be executed against your result, including transforming the output fields easily with zod transformers).
+- [x] Optional runtime validation of output (Your zod types can be executed against your result, including transforming the output fields with zod transformers).
 - [x] [Virtual field](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/virtual-columns) declaration in typescript (fully type-safe + with async support).
 - [x] [Declarative sorting](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/sorting) capabilities, with support for custom SQL sorting expressions
 - [x] [Offset-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/pagination).
@@ -91,6 +91,8 @@ const users = await client.getUsers.query({
 });
 ```
 
+This returns a relay-like pagination result, with `nodes` and `pageInfo` keys.
+
 From here on, you only need to add more options to your loader, to make the API more thorough and customized to your needs. You have full control over what SQL is being executed, and can get the raw SQL query using `getQuery`.
 
 ### [Documentation](https://ardsh.github.io/slonik-trpc/)
@@ -120,6 +122,10 @@ FROM users
 Note this sub-query will be called only when the authoredPosts is a selected field. Otherwise the database won't execute it, ensuring optimal performance.
 
 ### Filtering
+
+Instead of auto-generating all the filters for you, as many ORMs do for each field, which often makes for a poor public API, you're fully responsible for every single filter.
+
+Here's an example:
 
 ```ts
 import { createFilters, booleanFilter, arrayFilter, dateFilter, genericFilter } from 'slonik-trpc/utils';
@@ -154,9 +160,11 @@ const loader = makeQueryLoader({
 });
 ```
 
-`arrayFilter`, `dateFilter`, and `booleanFilter` are small utilities that can be used to build sql fragments for common filters.
+As you can see, the filter creation is very easy, yet it offers very powerful, flexible and type-safe filters, giving you complete control over the resulting API that is created.
 
-These filters can then be used when calling the API. `AND`, `OR` and `NOT` filters are added automatically, to allow more complex combinations.
+`arrayFilter`, `dateFilter`, and `booleanFilter` are small utilities that can be used to build sql fragments for common filters. You can look at [their implementation](https://github.com/ardsh/slonik-trpc/blob/main/src/helpers/sqlUtils.ts) if you wanna try creating your own.
+
+`AND`, `OR` and `NOT` are the only filters are added automatically, to allow more complex combinations.
 
 ```ts
 const specificUsers = await filtersLoader.load({
@@ -182,8 +190,7 @@ const specificUsers = await filtersLoader.load({
 });
 ```
 
-As you can see, the filter creation is very easy, yet it offers very powerful, flexible and type-safe filters, giving you complete control over the resulting API that is created.
-You can look at the [implementation of some filter utils for inspiration](https://github.com/ardsh/slonik-trpc/blob/main/src/helpers/sqlUtils.ts)
+However, these too can be disabled (when calling `getLoadArgs`), and it is recommended to do so for the `OR` filter, which is often computationally expensive and shouldn't be allowed on a public API.
 
 ### Authorization
 
@@ -425,6 +432,13 @@ Note that `loadPagination` will run an extra query for getting the total count, 
 SELECT COUNT(*) FROM (...) subQuery
 ```
 
+### Can this be used as an ORM
+
+Many features of ORMs, such as updating data, aren't supported at all by this package.
+
+However, this package can be integrated with any ORM that supports executing raw queries, such as [prisma](https://www.prisma.io/docs/concepts/components/prisma-client/raw-database-access).
+
+So you can use them both at the same time, by using slonik-trpc to build a type-safe yet flexible read-only API, and use the ORM for the rest.
 
 ## Known issues
 
@@ -499,7 +513,7 @@ You don't need to do this if your selects are dynamic, in that case simply consi
 
 Also this is not necessary when querying the loader directly in the serverside, in those cases fields will be automatically inferred depending on your selections.
 
-There are more advanced patterns to support [relay-like fragment selections](https://dev.to/ardsh/how-to-solve-overfetching-with-trpc-apis-when-rendering-tables-pt-1-fbg), or [tabular data loading](https://dev.to/ardsh/implementing-cursor-pagination-with-trpc-queries-3ifd) that allows rendering each table column in a type-safe method.
+There are more advanced patterns to support [relay-like fragment selections](https://dev.to/ardsh/how-to-solve-overfetching-with-trpc-apis-when-rendering-tables-pt-1-fbg), or [cursor pagination](https://ardsh.github.io/slonik-trpc/docs/client-type-safety/cursor-pagination) that allows rendering each table column in a type-safe method.
 
 ## 🤝 Contributing
 
@@ -521,7 +535,8 @@ yarn test
 - Wildcards in selects, e.g. `select: ["name*"]` to select all fields that start with name.
 - Custom loaders and/or plugins/middlewares for processing query results.
 - Mutations, through an update API builder.
-- ~~Integration with [prisma client raw database access](https://www.prisma.io/docs/concepts/components/prisma-client/raw-database-access), and other DB clients, separating data loading from query composition.~~ Done.
+  - Furthermore, building an entire CRUD tRPC API, by only requiring you to declare small SQL fragments and their zod types. Similar to hasura.
+- ~~Integration with [prisma client raw database access](https://www.prisma.io/docs/concepts/components/prisma-client/raw-database-access), and other DB clients, separating data loading from query composition.~~ [Done](https://github.com/ardsh/slonik-trpc/blob/main/examples/datagrid-example/src/server/db/loaders/employeeLoader.ts).
 
 ## 📝 License
 
