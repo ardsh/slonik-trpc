@@ -1184,6 +1184,94 @@ describe("withQueryLoader", () => {
         }>>();
     });
 
+    it("Loads cursor-based with group by", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: {
+                select: sql.type(z.object({
+                    value: z.string(),
+                    count: z.number(),
+                }))`SELECT value, COUNT(*)`,
+                from: sql.fragment`FROM test_table_bar`,
+                groupBy: sql.fragment`test_table_bar.value`,
+            },
+            filters: genericOptions.filters,
+            sortableColumns: {
+                value: "value",
+            }
+        });
+        const data = await loader.loadPagination({
+            select: ["value", "count"],
+            takeCursors: true,
+            orderBy: ["value", "ASC"],
+            where: {
+                largeIds: true,
+            },
+        });
+        expect(data).toEqual({
+            cursors: [
+                "eyJ2YWx1ZSI6ImNjYyJ9",
+                "eyJ2YWx1ZSI6ImRkZCJ9",
+                "eyJ2YWx1ZSI6ImVlZSJ9",
+            ],
+            nodes: [{
+                count: 1,
+                value: "ccc",
+            }, {
+                count: 2,
+                value: "ddd",
+            }, {
+                count: 1,
+                value: "eee",
+            }],
+            pageInfo: {
+                count: null,
+                endCursor: "eyJ2YWx1ZSI6ImVlZSJ9",
+                startCursor: "eyJ2YWx1ZSI6ImNjYyJ9",
+                hasNextPage: false,
+                hasPreviousPage: false,
+                minimumCount: 3,
+            },
+        });
+    });
+
+    it("Loads data grouped by", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: {
+                select: sql.type(z.object({
+                    value: z.string(),
+                    count: z.number(),
+                }))`SELECT value, COUNT(*)`,
+                from: sql.fragment`FROM test_table_bar`,
+                groupBy: sql.fragment`test_table_bar.value`,
+            },
+            sortableColumns: {
+                value: "value",
+            },
+            filters: genericOptions.filters,
+        });
+        const data = await loader.load({
+            orderBy: ["value", "ASC"]
+        });
+        expect(data).toEqual([{
+                count: 2,
+                value: "aaa",
+            }, {
+                count: 2,
+                value: "bbb",
+            }, {
+                count: 2,
+                value: "ccc",
+            }, {
+                count: 2,
+                value: "ddd",
+            }, {
+                count: 1,
+                value: "eee",
+            }]);
+    });
+
     it("Loads by cursor-based pagination when sorted by a single column", async () => {
         const loader = makeQueryLoader({
             db,
@@ -1564,7 +1652,7 @@ describe("withQueryLoader", () => {
         const query = loader.getQuery(args);
         const endCursor = data.pageInfo.endCursor;
         expect(data).toEqual({
-            cursors: ["eyJ2YWx1ZSI6ImFhYSIsImlkIjoxfQ=="],
+            cursors: ["eyJpZCI6MSwidmFsdWUiOiJhYWEifQ=="],
             nodes: [{
                 id: 1,
                 uid: "z",
@@ -1611,7 +1699,7 @@ describe("withQueryLoader", () => {
         const query = loader.getQuery(args);
         const endCursor = data.pageInfo.endCursor;
         expect(data).toEqual({
-            cursors: ["eyJ2YWx1ZSI6ImFhYSIsImlkIjoxfQ=="],
+            cursors: ["eyJpZCI6MSwidmFsdWUiOiJhYWEifQ=="],
             nodes: [{
                 id: 1,
                 value: "aaa",
@@ -1661,8 +1749,8 @@ describe("withQueryLoader", () => {
         const query = loader.getQuery(args);
         expect(data).toEqual({
             cursors: [
-                "eyJ2YWx1ZSI6ImJiYiIsImlkIjo0fQ==",
-                "eyJ2YWx1ZSI6ImJiYiIsImlkIjozfQ==",
+                "eyJpZCI6NCwidmFsdWUiOiJiYmIifQ==",
+                "eyJpZCI6MywidmFsdWUiOiJiYmIifQ==",
             ],
             nodes: [{
                 id: 4,
@@ -1676,8 +1764,8 @@ describe("withQueryLoader", () => {
                 hasNextPage: true,
                 minimumCount: 3,
                 count: 9,
-                startCursor: "eyJ2YWx1ZSI6ImJiYiIsImlkIjo0fQ==",
-                endCursor: "eyJ2YWx1ZSI6ImJiYiIsImlkIjozfQ==",
+                startCursor: "eyJpZCI6NCwidmFsdWUiOiJiYmIifQ==",
+                endCursor: "eyJpZCI6MywidmFsdWUiOiJiYmIifQ==",
             },
         });
 

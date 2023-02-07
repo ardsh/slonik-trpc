@@ -84,7 +84,7 @@ export const createFilters = <TContext=any>() => <TFilter extends Record<string,
     } as const;
 }
 
-type Filters<T extends Record<string, z.ZodType>, TContext> = {
+export type Filters<T extends Record<string, z.ZodType>, TContext> = {
     filters: T,
     interpreters: Interpretors<T, TContext>
 }

@@ -161,6 +161,29 @@ function getSelectedKeys(allKeys: string[], selected?: readonly any[], excluded?
     return allKeys;
 }
 
+/* Only necessary for backwards compatibility */
+function parseQuery<TQuery extends QuerySqlToken | SqlFragment>(query: TQuery | { select: TQuery, from: SqlFragment, groupBy?: SqlFragment }): {
+    select: TQuery,
+    from?: SqlFragment,
+    groupBy?: SqlFragment,
+} {
+    const q: any = query;
+    if (q.sql) {
+        return {
+            select: q,
+            from: undefined,
+            groupBy: undefined,
+        }
+    } else if (q.from.sql && q.select.sql) {
+        return {
+            select: q.select,
+            from: q.from,
+            groupBy: q.groupBy,
+        }
+    }
+    throw new Error("Invalid query: " + query);
+}
+
 export function makeQueryLoader<
     TContextZod extends z.ZodTypeAny,
     TFragment extends SqlFragment | QuerySqlToken,
@@ -174,7 +197,14 @@ export function makeQueryLoader<
     TSelectable extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
 >(options: {
-    query: TFragment,
+    query: TFragment | {
+        /** The select query (without including FROM) */
+        select: TFragment,
+        /** The FROM part of the query. Should start with `FROM` */
+        from: SqlFragment,
+        /** The GROUP BY part of the query. Don't include `GROUP BY` */
+        groupBy?: SqlFragment,
+    },
     /** Optional parameter that can be used to override the slonik query parser.
      * Doesn't need to be used if you use sql.type when declaring the query parameter.
      * */
@@ -276,10 +306,21 @@ export function makeQueryLoader<
         take?: number;
     };
 }) {
-    const query = options.query;
+    const queryComponents = parseQuery(options.query);
+    const query = queryComponents.select;
+    const fromFragment = queryComponents.from;
     if (query.sql.match(/;\s*$/)) {
         // TODO: Add more checks for invalid queries
         console.warn("Your query includes semicolons at the end. Please refer to the documentation of slonik-trpc, and do not include semicolons in the query:\n " + query.sql);
+    }
+    if (!fromFragment) {
+        console.warn("Deprecation warning: Specify query.from and query.select separately in makeQueryLoader", query?.sql);
+    }
+    if (fromFragment && !fromFragment?.sql?.match?.(/^\s*FROM/)) {
+        throw new Error("query.from must begin with FROM");
+    }
+    if (!query?.sql?.match?.(/^\s*SELECT/)) {
+        throw new Error("Your query must begin with SELECT");
     }
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
     // @ts-expect-error accessing internal _any
@@ -410,10 +451,11 @@ export function makeQueryLoader<
                     // Hacky way to get access to internal FROM tables for sorting expressions...
                     actualQuery = {
                         ...query,
+                        // TODO: Replace hacky way when query.from is required.
                         sql: query.sql.replace(/^\n*(\W\n?)*SELECT/i, `SELECT lateralcolumns.cursorjson ${cursorColumns}, `),
                     }
                 }
-                lateralExpressions.push(sql.fragment`json_build_object(${
+                lateralExpressions.push(sql.fragment`jsonb_build_object(${
                     orderExpressions.length
                       ? sql.join(
                           orderExpressions.flatMap((expression) => [sql.literalValue(expression[0]), interpretFieldFragment(orderByType.parse(expression)[0])]),
@@ -460,8 +502,14 @@ export function makeQueryLoader<
                 )})`
             );
         }
-        const baseQuery = sql.type(zodType)`${actualQuery} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
+        const groupExpression = queryComponents.groupBy?.sql ? [
+            queryComponents.groupBy,
+            lateralExpressions[0] ? sql.fragment`lateralcolumns.cursorjson` : null
+        ].filter(notEmpty) : [];
+
+        const baseQuery = sql.type(zodType)`${actualQuery} ${queryComponents.from ?? sql.fragment``} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
         ${conditions.length ? sql.fragment`WHERE (${sql.join(conditions, sql.fragment`) AND (`)})` : sql.fragment``}
+        ${groupExpression?.length ? sql.fragment`GROUP BY ${sql.join(groupExpression, sql.fragment`, `)}` : sql.fragment``}
         ${orderExpressions ? sql.fragment`ORDER BY ${sql.join(orderExpressions.map(parsed => interpretOrderBy(orderByType.parse(parsed), reverse)), sql.fragment`, `)}` : sql.fragment``}
         ${typeof take === 'number' ? sql.fragment`LIMIT ${take}` : sql.fragment``}
         ${typeof skip === 'number' ? sql.fragment`OFFSET ${skip}` : sql.fragment``}

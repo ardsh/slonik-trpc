@@ -44,12 +44,12 @@ Here's a [demo](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datag
 Declare the query as you would normally with slonik.
 
 ```ts
-const query = sql.type(z.object({
+const select = sql.type(z.object({
     id: z.string(),
     name: z.string(),
     email: z.string(),
     created_at: z.string()
-}))`SELECT id, name, email, created_at FROM users`;
+}))`SELECT id, name, email, created_at`;
 ```
 
 This is enough to create a type-safe API
@@ -59,7 +59,10 @@ import { makeQueryLoader } from 'slonik-trpc';
 
 const loader = makeQueryLoader({
     db: slonikConnection,
-    query,
+    query: {
+        select,
+        from: sql.fragment`FROM users`,
+    },
 });
 ```
 
@@ -123,7 +126,7 @@ Note this sub-query will be called only when the authoredPosts is a selected fie
 
 ### Filtering
 
-Instead of auto-generating all the filters for you, as many ORMs do for each field, which often makes for a poor public API, you're fully responsible for every single filter.
+You can add any filter to the API, by specifying the filter type, and the interpreter function that converts the filter input to a SQL fragment, in a declarative way.
 
 Here's an example:
 
@@ -280,6 +283,44 @@ const lastPage = await db.any(sortableLoader.getQuery({
     orderBy: [["name", "DESC"], ["id", "ASC"]],
     take: -25,
 }));
+```
+
+### Grouping
+
+You can add a `groupBy` fragment to your query, to be able to use aggregates in your select.
+
+E.g. for getting the user's posts count, you can use
+
+```ts
+const groupedLoader = makeQueryLoader({
+    query: {
+        select: sql.type(z.object({
+            count: z.number(),
+            name: z.string(),
+        }))`SELECT COUNT(*), users.name`,
+        from: sql.fragment`FROM posts
+            LEFT JOIN users
+                ON posts.author = users.id`,
+        groupBy: sql.fragment`users.name`,
+    },
+    filters: createFilters<Context>()({
+        categories: z.union([z.string(), z.array(z.string())]),
+    }, {
+        // Filter based on posts category.
+        categories: (value) => arrayFilter(value, sql.fragment`posts.category`),
+    }),
+});
+```
+
+Now you can easily filter authors by their posts, and still get the posts count.
+
+```ts
+const bigPostsCount = await sortableLoader.load({
+    where: {
+        categories: ["typescript"]
+    },
+});
+// Returns counts of typescript posts for each user.
 ```
 
 ### Cursor-based pagination
