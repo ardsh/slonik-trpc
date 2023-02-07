@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.9.2
+
+### Patch Changes
+
+-   0ca01d2: Added groupBy option for query, deprecated old method of declaring queries
+
 ## 0.9.1
 
 ### Patch Changes
