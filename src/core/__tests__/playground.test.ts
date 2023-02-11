@@ -12,13 +12,16 @@ const db = makeQueryTester('playground').db;
 test("playground", async () => {
 expect(3).toEqual(3);
 
-const query = sql.type(z.object({
-    id: z.string(),
-    first_name: z.string(),
-    last_name: z.string(),
-    email: z.string(),
-    created_at: z.number(),
-}))`SELECT id, first_name, last_name, email, created_at FROM users`;
+const query = {
+    select: sql.type(z.object({
+        id: z.string(),
+        first_name: z.string(),
+        last_name: z.string(),
+        email: z.string(),
+        created_at: z.number(),
+    }))`SELECT id, first_name, last_name, email, created_at`,
+    from: sql.fragment`FROM users`,
+};
 
 const selectionLoader = makeQueryLoader({
     query,

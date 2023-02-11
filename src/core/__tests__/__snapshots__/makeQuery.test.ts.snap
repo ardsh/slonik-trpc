@@ -174,14 +174,16 @@ exports[`withQueryLoader Doesn't allow sorting with invalid directions 1`] = `
             "code": "invalid_enum_value",
             "options": [
               "ASC",
-              "DESC"
+              "DESC",
+              "ASC NULLS LAST",
+              "DESC NULLS LAST"
             ],
             "path": [
               "orderBy",
               0,
               1
             ],
-            "message": "Invalid enum value. Expected 'ASC' | 'DESC', received '; DELETE * FROM users'"
+            "message": "Invalid enum value. Expected 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST', received '; DELETE * FROM users'"
           }
         ],
         "name": "ZodError"

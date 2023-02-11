@@ -6,25 +6,27 @@ import { makeQueryTester } from "./makeQueryTester";
 
 const db = makeQueryTester('performance').db;
 
-const query = sql.type(z.object({
-    id: z.number(),
-    uid: z.string(),
-    value: z.string(),
-    date: z.number(),
-    user: z.object({
-        first_name: z.string(),
-        last_name: z.string(),
-        email: z.string(),
-    }),
-}))`SELECT test_table_bar.id, uid, value, date
-, ${rowToJson(
-    sql.fragment`
-    SELECT first_name, last_name, email
-    WHERE users.id IS NOT NULL`, 'user'
-)}
-FROM test_table_bar
-LEFT JOIN users
-ON users.id = test_table_bar.uid`;
+const query = {
+    select: sql.type(z.object({
+        id: z.number(),
+        uid: z.string(),
+        value: z.string(),
+        date: z.number(),
+        user: z.object({
+            first_name: z.string(),
+            last_name: z.string(),
+            email: z.string(),
+        }),
+    }))`SELECT test_table_bar.id, uid, value, date
+    , ${rowToJson(
+        sql.fragment`
+        SELECT first_name, last_name, email
+        WHERE users.id IS NOT NULL`, 'user'
+    )}`,
+    from: sql.fragment`FROM test_table_bar
+    LEFT JOIN users
+    ON users.id = test_table_bar.uid`,
+};
 
 const loader = makeQueryLoader({
     query,

@@ -8,7 +8,7 @@ Declare any fields you want to process in typescript as virtual fields.
 
 ```ts
 const virtualFieldsLoader = makeQueryLoader({
-    query,
+    // ...
     virtualFields: {
         fullName: {
             dependencies: ["first_name", "last_name"],
@@ -41,7 +41,7 @@ This can be used to return a field based on the context, e.g.
 
 ```ts
 const virtualFieldsLoader = makeQueryLoader({
-    query,
+    // ...
     virtualFields: {
         content: {
             dependencies: ["content"],
@@ -58,5 +58,5 @@ const virtualFieldsLoader = makeQueryLoader({
 ```
 
 :::tip Overriding
-A virtual field can override a real field by using the same name.
+A virtual field can override a real field by using the same name. This can also be used to access control certain fields based on user context.
 :::

@@ -34,7 +34,10 @@ const postsLoader = makeQueryLoader({
         author: ["first_name", "last_name"],
         extraPostFields: ["created_at", "content"],
     },
-    query: sql.type(zodType)`SELECT posts.*, users.first_name, users.last_name FROM posts LEFT JOIN users ON users.id = posts.author_id`,
+    query: {
+        select: sql.type(zodType)`SELECT posts.*, users.first_name, users.last_name`,
+        from: sq.fragment`FROM posts LEFT JOIN users ON users.id = posts.author_id`,
+    },
 });
 ```
 

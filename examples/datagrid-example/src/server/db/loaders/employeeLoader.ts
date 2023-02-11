@@ -51,7 +51,10 @@ export type EmployeeLoader = typeof employeeLoader;
 const sqliteCompatibility = true;
 
 export const employeeLoader = makeQueryLoader({
-    query,
+    query: {
+        select: query,
+        from: sql.fragment``,
+    },
     // SQLite compatibility
     ...(sqliteCompatibility ? {
         options: {

@@ -27,7 +27,8 @@ const query = sql.type(
     author.email,
     posts.author_id,
     posts.created_at
-FROM posts
+`;
+const fromFragment = sql.fragment`FROM posts
 LEFT JOIN users author
     ON author.id = posts.author_id`;
 
@@ -57,7 +58,10 @@ const filters = createFilters<Context>()({
 });
 
 export const postsLoader = makeQueryLoader({
-    query,
+    query: {
+        select: query,
+        from: fromFragment,
+    },
     db,
     filters,
     sortableColumns: {

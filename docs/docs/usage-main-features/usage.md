@@ -16,7 +16,8 @@ Create a file at `src/postsLoader.ts`:
 import { makeQueryLoader } from 'slonik-trpc';
 import { sql } from 'slonik';
 
-const postsQuery = sql.type(z.object({
+const postsQuery = {
+    select: sql.type(z.object({
         id: z.number(),
         author: z.string(),
         title: z.string(),
@@ -25,13 +26,14 @@ const postsQuery = sql.type(z.object({
         posts.id,
         users.first_name || ' ' || users.last_name AS author,
         posts.title,
-        posts.date
-    FROM posts
+        posts.date`,
+    from: sql.fragment`FROM posts
     LEFT JOIN users
-        ON users.id = posts.author_id`;
+        ON users.id = posts.author_id`
+};
 
 export const postsLoader = makeQueryLoader({
     db,
-    query,
+    query: postsQuery,
 });
 ```

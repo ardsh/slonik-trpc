@@ -20,7 +20,8 @@ const query = sql.type(z.object({
     SELECT first_name, last_name, email
     WHERE users.id IS NOT NULL`, 'user'
 )}
-FROM test_table_bar
+`;
+const fromFragment = sql.fragment`FROM test_table_bar
 LEFT JOIN users
 ON users.id = test_table_bar.uid`;
 
@@ -40,7 +41,10 @@ const options = createOptions({
     db: createMockPool({
         query: async () => createMockQueryResult(items as any),
     }),
-    query,
+    query: {
+        select: query,
+        from: fromFragment,
+    },
 });
 
 export const testLoader = async (opts?: { name?: string } & Omit<Parameters<typeof makeQueryLoader>[0], "query" | "db">) => {

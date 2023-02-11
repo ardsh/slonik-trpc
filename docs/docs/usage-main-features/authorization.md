@@ -10,9 +10,7 @@ Use it to add hardcoded conditions to the query, based on the context.
 ```ts
 
 const userLoader = makeQueryLoader({
-    db,
-    query,
-    filters,
+    // ...
     constraints(ctx) {
         if (ctx.role === 'ADMIN') {
             // Allow admins to query anyone by returning no extra permission rules.

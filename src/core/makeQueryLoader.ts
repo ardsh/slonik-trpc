@@ -5,16 +5,16 @@ import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, rec
 import { debug } from '../helpers/debug';
 import { fromCursor, toCursor } from "../helpers/cursors";
 
-const orderDirection = z.enum(["ASC", "DESC"]);
+const orderDirection = z.enum(["ASC", "DESC", "ASC NULLS LAST", "DESC NULLS LAST"]);
 type OrderDirection = z.infer<typeof orderDirection>;
 type OrderField = [string | [string, string] | [string, string, string] | FragmentSqlToken, z.infer<typeof orderDirection>];
 
 function getOrderByDirection(field: OrderField, reverse?: boolean) {
     switch (field[1]) {
     case 'ASC': return reverse ? sql.fragment`DESC` : sql.fragment`ASC`;
-    // case 'ASC NULLS LAST': return sql.fragment`ASC NULLS LAST`;
+    case 'ASC NULLS LAST': return reverse ? sql.fragment`DESC NULLS FIRST` : sql.fragment`ASC NULLS LAST`;
     case 'DESC': return reverse ? sql.fragment`ASC` : sql.fragment`DESC`;
-    // case 'DESC NULLS LAST': return sql.fragment`DESC NULLS LAST`;
+    case 'DESC NULLS LAST': return reverse ? sql.fragment`ASC NULLS FIRST` : sql.fragment`DESC NULLS LAST`;
     }
 }
 
@@ -125,7 +125,7 @@ type LoadParameters<
      * ["id", "ASC"]
      * ```
      * */
-    orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+    orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
     /* Pass the context that will be used for filters postprocessing and virtual field resolution */
     ctx?: TContext;
     where?: RecursiveFilterConditions<TFilter>;
@@ -161,29 +161,6 @@ function getSelectedKeys(allKeys: string[], selected?: readonly any[], excluded?
     return allKeys;
 }
 
-/* Only necessary for backwards compatibility */
-function parseQuery<TQuery extends QuerySqlToken | SqlFragment>(query: TQuery | { select: TQuery, from: SqlFragment, groupBy?: SqlFragment }): {
-    select: TQuery,
-    from?: SqlFragment,
-    groupBy?: SqlFragment,
-} {
-    const q: any = query;
-    if (q.sql) {
-        return {
-            select: q,
-            from: undefined,
-            groupBy: undefined,
-        }
-    } else if (q.from.sql && q.select.sql) {
-        return {
-            select: q.select,
-            from: q.from,
-            groupBy: q.groupBy,
-        }
-    }
-    throw new Error("Invalid query: " + query);
-}
-
 export function makeQueryLoader<
     TContextZod extends z.ZodTypeAny,
     TFragment extends SqlFragment | QuerySqlToken,
@@ -197,11 +174,11 @@ export function makeQueryLoader<
     TSelectable extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
 >(options: {
-    query: TFragment | {
+    query: {
         /** The select query (without including FROM) */
         select: TFragment,
         /** The FROM part of the query. Should start with `FROM` */
-        from: SqlFragment,
+        from?: SqlFragment,
         /** The GROUP BY part of the query. Don't include `GROUP BY` */
         groupBy?: SqlFragment,
     },
@@ -302,11 +279,11 @@ export function makeQueryLoader<
         runtimeCheck?: boolean
     },
     defaults?: {
-        orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC']> | null;
+        orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
         take?: number;
     };
 }) {
-    const queryComponents = parseQuery(options.query);
+    const queryComponents = options.query;
     const query = queryComponents.select;
     const fromFragment = queryComponents.from;
     if (query.sql.match(/;\s*$/)) {
@@ -316,7 +293,7 @@ export function makeQueryLoader<
     if (!fromFragment) {
         console.warn("Deprecation warning: Specify query.from and query.select separately in makeQueryLoader", query?.sql);
     }
-    if (fromFragment && !fromFragment?.sql?.match?.(/^\s*FROM/)) {
+    if (fromFragment && fromFragment.sql?.length > 5 && !fromFragment?.sql?.match?.(/^\s*FROM/)) {
         throw new Error("query.from must begin with FROM");
     }
     if (!query?.sql?.match?.(/^\s*SELECT/)) {
@@ -468,12 +445,6 @@ export function makeQueryLoader<
         if ((searchAfter || cursor) && orderExpressions?.length) {
             const orderByExpressions = orderExpressions.map(parsed => [interpretFieldFragment(orderByType.parse(parsed)[0]), parsed[1], parsed[0]] as const);
             const cursorValues = cursor ? fromCursor(cursor) : {} as never;
-            if (Array.isArray(cursorValues)) {
-                // Patching old array cursors...temporary only until next minor version
-                cursorValues.forEach((value, idx) => {
-                    cursorValues[orderExpressions[idx][0]] = value;
-                });
-            }
             conditions.push(
                 sql.fragment`(${sql.join(
                 orderByExpressions.map((_, outerIndex) => {
@@ -507,7 +478,7 @@ export function makeQueryLoader<
             lateralExpressions[0] ? sql.fragment`lateralcolumns.cursorjson` : null
         ].filter(notEmpty) : [];
 
-        const baseQuery = sql.type(zodType)`${actualQuery} ${queryComponents.from ?? sql.fragment``} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
+        const baseQuery = sql.type(zodType)`${actualQuery} ${fromFragment ?? sql.fragment``} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
         ${conditions.length ? sql.fragment`WHERE (${sql.join(conditions, sql.fragment`) AND (`)})` : sql.fragment``}
         ${groupExpression?.length ? sql.fragment`GROUP BY ${sql.join(groupExpression, sql.fragment`, `)}` : sql.fragment``}
         ${orderExpressions ? sql.fragment`ORDER BY ${sql.join(orderExpressions.map(parsed => interpretOrderBy(orderByType.parse(parsed), reverse)), sql.fragment`, `)}` : sql.fragment``}

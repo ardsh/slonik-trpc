@@ -28,7 +28,10 @@ describe("withQueryLoader", () => {
     it("Works with fragment", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.fragment`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             type: z.object({
                 id: z.number(),
                 uid: z.string(),
@@ -44,7 +47,10 @@ describe("withQueryLoader", () => {
     it("Works with sql query type", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
         });
         const result = await loader.load({});
         expect(result[0].id).toEqual(expect.any(Number));
@@ -55,7 +61,10 @@ describe("withQueryLoader", () => {
     it("Returns correct query", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
         });
         const query = loader.getQuery({
             select: ['id'],
@@ -69,7 +78,10 @@ describe("withQueryLoader", () => {
     it("Returns virtual fields", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             virtualFields: {
                 ids: {
                     resolve: (row) => {
@@ -91,7 +103,10 @@ describe("withQueryLoader", () => {
     it("Returns virtual fields by default if none are selected/excluded", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             virtualFields: {
                 ids: {
                     resolve: (row, ctx) => {
@@ -119,7 +134,10 @@ describe("withQueryLoader", () => {
     it("A virtual field can overwrite a real field", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             virtualFields: {
                 id: {
                     resolve: (row) => {
@@ -141,7 +159,10 @@ describe("withQueryLoader", () => {
         const resolve = jest.fn((row) => row.id + row.uid);
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             virtualFields: {
                 ids: {
                     resolve,
@@ -163,7 +184,10 @@ describe("withQueryLoader", () => {
     it("Passes the context as a 2nd parameter in virtual field resolvers", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             contextParser: z.object({
                 userId: z.string(),
             }),
@@ -199,7 +223,10 @@ describe("withQueryLoader", () => {
     it("Allows returning promises from virtual fields", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             virtualFields: {
                 ids: {
                     resolve: async (row) => {
@@ -225,7 +252,10 @@ describe("withQueryLoader", () => {
     it("Supports multiple (mixed) virtual fields", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             virtualFields: {
                 ids: {
                     resolve: async (row) => {
@@ -257,7 +287,10 @@ describe("withQueryLoader", () => {
     it("Allows selecting fields", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.fragment`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.fragment`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             type: zodType,
         });
         const query = await loader.loadPagination({
@@ -273,7 +306,10 @@ describe("withQueryLoader", () => {
     it("Throws errors that occur in virtual fields", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.fragment`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.fragment`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             type: zodType,
             virtualFields: {
                 ids: {
@@ -295,7 +331,10 @@ describe("withQueryLoader", () => {
     it("Allows ordering by specified columns", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 value: ["test_table_bar", "value"],
             },
@@ -312,7 +351,10 @@ describe("withQueryLoader", () => {
     it("Allows ordering by multiple columns", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 value: ["test_table_bar", "value"],
                 id: "id",
@@ -332,7 +374,10 @@ describe("withQueryLoader", () => {
     it("Allows using sql fragment for specifying sortable columns", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 value: sql.fragment`COALESCE("uid", "value")`,
                 id: "id",
@@ -352,7 +397,10 @@ describe("withQueryLoader", () => {
     it("Allows sorting by non-selectable columns", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT id, uid, value FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT id, uid, value`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 date: "date"
             },
@@ -372,7 +420,10 @@ describe("withQueryLoader", () => {
     it("Doesn't allow invalid sort direction", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT id, uid FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT id, uid`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 date: "date"
             },
@@ -386,7 +437,10 @@ describe("withQueryLoader", () => {
     it("Allows defining filters", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             filters: {
                 filters: {
                     largeIds: z.boolean(),
@@ -419,7 +473,10 @@ describe("withQueryLoader", () => {
 
     const genericOptions = createOptions({
         db,
-        query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+        query: {
+            select: sql.type(zodType)`SELECT *`,
+            from: sql.fragment`FROM test_table_bar`,
+        },
         constraints() {
             return sql.fragment`TRUE`;
         },
@@ -643,7 +700,10 @@ describe("withQueryLoader", () => {
     it("Returns all keys if type is a zod.any() type (intentional skipping)", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(z.any())`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(z.any())`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
         });
         const take = 1;
         const query = await loader.loadPagination({
@@ -667,7 +727,10 @@ describe("withQueryLoader", () => {
             sortableColumns: {
                 id: "id",
             },
-            query: sql.type(z.any())`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(z.any())`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
         });
         const take = 1;
         const query = await loader.getQuery({
@@ -756,7 +819,10 @@ describe("withQueryLoader", () => {
 
     it("Doesn't allow filtering when no filters are specified", async () => {
         const loader = makeQueryLoader({
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
         });
         const parser = loader.getLoadArgs();
         const parsed = parser.parse({
@@ -960,7 +1026,7 @@ describe("withQueryLoader", () => {
         });
         const parser = loader.getLoadArgs({
             transformSortColumns(columns) {
-                expectTypeOf(columns).toEqualTypeOf<["value" | "id", "ASC" | "DESC" | "ASC" | "DESC"][] | null | undefined>();
+                expectTypeOf(columns).toEqualTypeOf<["value" | "id", "ASC" | "DESC" | "ASC NULLS LAST" | "DESC NULLS LAST"][] | null | undefined>();
                 if (Array.isArray(columns)) {
                     return [...columns, ["id", "ASC"]];
                 }
@@ -1169,7 +1235,10 @@ describe("withQueryLoader", () => {
     it("Query parser is type-safe by default", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            }
         });
         const query = loader.getQuery({
             select: ['id'],
@@ -1275,7 +1344,10 @@ describe("withQueryLoader", () => {
     it("Loads by cursor-based pagination when sorted by a single column", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
             }
@@ -1298,7 +1370,10 @@ describe("withQueryLoader", () => {
     it("Loads by cursor-based pagination with multiple columns", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 value: sql.fragment`"value"`,
@@ -1341,7 +1416,10 @@ describe("withQueryLoader", () => {
     it("Loads cursor-based even when sorted by complex expression column", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT id, uid, value FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT id, uid, value`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 upperValue: sql.fragment`UPPER("value")`,
@@ -1384,7 +1462,10 @@ describe("withQueryLoader", () => {
     it("Reverses the order when take parameter is negative, while returning items in the original order", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 upperValue: sql.fragment`UPPER(test_table_bar."value")`,
@@ -1426,7 +1507,10 @@ describe("withQueryLoader", () => {
     it("Negative take doesn't work when sorting isn't specified", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 upperValue: sql.fragment`UPPER("value")`,
@@ -1442,7 +1526,10 @@ describe("withQueryLoader", () => {
     it("Cursor-based pagination doesn't work properly if searchAfter values aren't specified (NOT A BUG) (UNSPECIFIED BEHAVIOR, MAY CHANGE)", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 value: sql.fragment`"value"`,
@@ -1480,7 +1567,10 @@ describe("withQueryLoader", () => {
     it("Cursor-based pagination doesn't work properly if searchAfter values aren't specified for primary column (NOT A BUG) (UNSPECIFIED BEHAVIOR, MAY CHANGE)", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 value: sql.fragment`"value"`,
@@ -1634,7 +1724,10 @@ describe("withQueryLoader", () => {
     it("Returns items after cursor", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: ["test_table_bar", "id"],
                 value: sql.fragment`"value"`,
@@ -1680,7 +1773,10 @@ describe("withQueryLoader", () => {
     it("Can access internal columns for determining the cursor", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT test_table_bar.id, test_table_bar.uid, test_table_bar.value FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT test_table_bar.id, test_table_bar.uid, test_table_bar.value`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 value: sql.fragment`"value"`,
@@ -1726,7 +1822,10 @@ describe("withQueryLoader", () => {
     it("Cursor works with negative take", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 value: sql.fragment`test_table_bar."value"`,
@@ -1780,7 +1879,10 @@ describe("withQueryLoader", () => {
     it("Throws an error with invalid cursors", async () => {
         const loader = makeQueryLoader({
             db,
-            query: sql.type(zodType)`SELECT * FROM test_table_bar`,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
             sortableColumns: {
                 id: "id",
                 value: sql.fragment`"value"`,

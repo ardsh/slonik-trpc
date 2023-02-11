@@ -152,7 +152,10 @@ import { mergeFilters } from 'slonik-trpc/utils';
 
 const postsLoader = makeQueryLoader({
     db,
-    query: sql.type(zodType)`SELECT posts.*, users.first_name, users.last_name FROM posts LEFT JOIN users ON users.id = posts.author_id`,
+    query: {
+        select: sql.type(zodType)`SELECT posts.*, users.first_name, users.last_name`,
+        from: sql.fragment`FROM posts LEFT JOIN users ON users.id = posts.author_id`,
+    },
     filters,
 })
 ```
