@@ -1,6 +1,6 @@
 {
     "name": "slonik-trpc",
-    "version": "0.9.2",
+    "version": "0.10.0",
     "description": "Slonik tRPC loader",
     "main": "lib/index.js",
     "types": "lib/index.d.ts",

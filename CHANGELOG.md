@@ -1,5 +1,14 @@
 # slonik-trpc
 
+## 0.10.0
+
+### Minor Changes
+
+-   ef0393f: ## Breaking Changes
+
+    -   Removed old query fragment option.
+    -   Specify query as an object with `select`, `from`, and `groupBy` keys.
+
 ## 0.9.2
 
 ### Patch Changes
