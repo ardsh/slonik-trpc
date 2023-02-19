@@ -462,8 +462,10 @@ export function makeQueryLoader<
                             operator = direction === (reverse ? "DESC" : "ASC")
                                 ? sql.fragment`>` : sql.fragment`<`;
                             if (value === null) {
-                                nullFragment = sql.fragment`${expression} IS NULL`;
+                                nullFragment = sql.fragment`${expression} IS NOT NULL`;
                             }
+                        } else if (value === null) {
+                            nullFragment = sql.fragment`${expression} IS NULL`;
                         }
                         return value !== null && value !== undefined ? sql.fragment`${expression} ${operator} ${value}`
                             : nullFragment;

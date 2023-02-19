@@ -9,6 +9,13 @@ import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } 
 import { expectTypeOf } from 'expect-type';
 import { createOptions } from '../../index';
 
+const decodeCursors = ({ startCursor='', endCursor='' }) => {
+    return {
+        start: JSON.parse(Buffer.from(startCursor, 'base64').toString()),
+        end: JSON.parse(Buffer.from(endCursor, 'base64').toString()),
+    }
+}
+
 describe("withQueryLoader", () => {
     const { db } = makeQueryTester();
 
@@ -1589,14 +1596,14 @@ describe("withQueryLoader", () => {
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
         const query = loader.getQuery(parsed);
-        expect(query.sql).toContain(`("id" IS NULL) OR (TRUE AND "value" > $1)`)
+        expect(query.sql).toContain(`("id" IS NOT NULL) OR ("id" IS NULL AND "value" > $1)`)
         expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
         expectTypeOf(parsed.where).toEqualTypeOf<undefined>();
         const data = await loader.loadPagination(args);
         expect(data).toEqual({
             nodes: [{
-                id: 5,
-                value: "ccc"
+                id: 1,
+                value: "aaa"
             }],
             pageInfo: {
                 hasPreviousPage: true,
@@ -1609,6 +1616,58 @@ describe("withQueryLoader", () => {
             select: ["id", "value"],
         }>>();
         expect(args).toEqual(parsed);
+    });
+
+
+    it("Cursor-based pagination tries to work with nullable columns", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: {
+                select: sql.type(z.object({
+                    id: z.string().nullish(),
+                    date_of_birth: z.number().nullish(),
+                    email: z.string().nullish(),
+                }))`SELECT id, date_of_birth, email`,
+                from: sql.fragment`FROM users`,
+            },
+            sortableColumns: {
+                id: "id",
+                email: "email",
+                dateOfBirth: sql.fragment`"date_of_birth"`,
+            }
+        });
+        const firstPage = await loader.loadPagination({
+            select: ['id', 'email', 'date_of_birth'],
+            searchAfter: {
+                dateOfBirth: null,
+                id: "t",
+            },
+            take: 2,
+            takeCount: true,
+            takeCursors: true,
+            orderBy: [["dateOfBirth", "DESC"], ["id", "ASC"]],
+        });
+        expect(loader.getQuery({
+            select: ['id', 'email', 'date_of_birth'],
+            searchAfter: {
+                dateOfBirth: null,
+                email: "email",
+                id: "w",
+            },
+            take: 1,
+            takeCursors: true,
+            orderBy: [["email", "ASC"], ["dateOfBirth", "DESC"], ["id", "ASC"]],
+        }).sql).toContain(`("email" > $1) OR ("email" = $2 AND "date_of_birth" IS NOT NULL) OR ("email" = $3 AND "date_of_birth" IS NULL AND "id" > $4)`);
+        expect(decodeCursors(firstPage.pageInfo)).toEqual({
+            start: {
+                dateOfBirth: null,
+                id: "u",
+            },
+            end: {
+                dateOfBirth: expect.any(String),
+                id: "v",
+            }
+        });
     });
 
     // Column groups

@@ -4,9 +4,9 @@
 ![Coverage](coverage/badge.svg)
 ![License](https://img.shields.io/npm/l/slonik-trpc)
 
-`slonik-trpc` is a group of utilities for creating type-safe querying APIs with SQL queries, using [slonik](https://github.com/gajus/slonik) and [zod](https://github.com/colinhacks/zod). Its main purpose is to help bridge the gap between PostgreSQL, and your typesafe API, a proof of concept of how pure SQL can be made type-safe.
+`slonik-trpc` is an API engine for creating type-safe querying APIs with SQL queries, using [slonik](https://github.com/gajus/slonik) and [zod](https://github.com/colinhacks/zod).
 
-You can think of it like [postgraphile](https://github.com/graphile/postgraphile) for tRPC, allowing you to build a blazing-fast [tRPC](https://github.com/trpc/trpc) querying API very quickly. It follows the philosophy of allowing you to use [any SQL query as a relation](https://theartofpostgresql.com/blog/2019-09-the-r-in-orm).
+In short, it allows you to [convert any query](https://theartofpostgresql.com/blog/2019-09-the-r-in-orm) into a full-blown API, with cursor pagination, authorization checks, sorting, custom filtering and more, using only small composable SQL fragments and zod types.
 
 ## Features
 
@@ -44,12 +44,13 @@ Here's a [demo](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datag
 Declare the query as you would normally with slonik.
 
 ```ts
-const select = sql.type(z.object({
+const userType = z.object({
     id: z.string(),
     name: z.string(),
     email: z.string(),
     created_at: z.string()
-}))`SELECT id, name, email, created_at`;
+});
+const usersSelect = sql.type(userType)`SELECT id, name, email, created_at`;
 ```
 
 This is enough to create a type-safe API
@@ -60,9 +61,45 @@ import { makeQueryLoader } from 'slonik-trpc';
 const loader = makeQueryLoader({
     db: slonikConnection,
     query: {
-        select,
+        select: usersSelect,
         from: sql.fragment`FROM users`,
     },
+    sortableColumns: {
+        id: ["users", "id"],
+        createdAt: ["users", "created_at"],
+    }
+});
+```
+
+It can be called via typescript, providing full type-safety.
+
+```ts
+const users = await loader.load({
+    orderBy: ["createdAt", "DESC"],
+    select: ["id", "email", "createdAt"],
+    take: 200,
+});
+// Returns 200 user objects sorted by createdAt descending
+
+const users = await loader.loadPagination({
+    // searchAfter for usage in cursorPagination
+    searchAfter: {
+        id: "abc",
+        // Returns only users created after march 15th
+        createdAt: "2023-03-15T12:45Z",
+    },
+    orderBy: [["createdAt", "ASC"], ["id", "ASC"]],
+    select: ["id", "email", "createdAt"],
+    take: 100,
+});
+
+// This is equivalent (endCursor+startCursor are returned from loadPagination)
+const users = await loader.load({
+    cursor: "eyJpZCI6ICJhYmMiLCJjcmVhdGVkQXQiOiAiMjAyMy0wMy0xNVQxMjo0NVoifQ==",
+    // Base64-encoded opaque cursor
+    orderBy: [["createdAt", "ASC"], ["id", "ASC"]],
+    select: ["id", "email", "createdAt"],
+    take: 100,
 });
 ```
 
@@ -89,6 +126,7 @@ Now it can be called via tRPC:
 ```ts
 const users = await client.getUsers.query({
     select: ["id", "title", "content"], // Will query only these 3 columns, ignoring the rest
+    orderBy: [["createdAt", "DESC"], ["id", "ASC"]],
     take: 25,
     skip: 0,
 });

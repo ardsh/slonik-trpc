@@ -45,6 +45,7 @@ export function makeQueryTester(namespace?: string) {
                 "first_name" text NOT NULL,
                 "last_name" text NOT NULL,
                 "email" text NOT NULL,
+                "date_of_birth" TIMESTAMP,
                 "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -62,17 +63,17 @@ export function makeQueryTester(namespace?: string) {
                 (9, 'r', 'eee', '2022-09-01');
 
             INSERT INTO users
-                (id, "first_name", "last_name", email)
+                (id, "first_name", "last_name", email, "date_of_birth")
             VALUES
-                ('z', 'Haskell', 'Nguyen', 'haskell04@gmail.com'),
-                ('y', 'Padberg', 'Fletcher', 'padberg.shawna@hotmail.com'),
-                ('x', 'Neal', 'Phillips', 'nvandervort@collier.com'),
-                ('w', 'Nolan', 'Muller', 'qnolan@yahoo.com'),
-                ('v', 'Bob', 'Dean', 'acummerata@gmail.com'),
-                ('u', 'Rebecca', 'Mercer', 'moore.rebeca@yahoo.com'),
-                ('t', 'Katheryn', 'Ritter', 'katheryn89@hotmail.com'),
-                ('s', 'Dulce', 'Espinoza', 'dulce23@gmail.com'),
-                ('r', 'Paucek', 'Clayton', 'paucek.deangelo@hotmail.com');
+                ('z', 'Haskell', 'Nguyen', 'haskell04@gmail.com', '1990-01-01'),
+                ('y', 'Padberg', 'Fletcher', 'padberg.shawna@hotmail.com', '1991-02-01'),
+                ('x', 'Neal', 'Phillips', 'nvandervort@collier.com', '1992-03-01'),
+                ('w', 'Nolan', 'Muller', 'qnolan@yahoo.com', '1993-04-01'),
+                ('v', 'Bob', 'Dean', 'acummerata@gmail.com', '1994-05-01'),
+                ('u', 'Rebecca', 'Mercer', 'moore.rebeca@yahoo.com', NULL),
+                ('t', 'Katheryn', 'Ritter', 'katheryn89@hotmail.com', NULL),
+                ('s', 'Dulce', 'Espinoza', 'dulce23@gmail.com', NULL),
+                ('r', 'Paucek', 'Clayton', 'paucek.deangelo@hotmail.com', NULL);
         `);
     };
     if ((global as any).beforeAll) {

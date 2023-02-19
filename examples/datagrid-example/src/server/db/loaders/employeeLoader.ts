@@ -23,24 +23,25 @@ export const employee = z.object({
     endDate: z.union([z.string(), z.date()]).transform(a => a instanceof Date ? a.toISOString().slice(0,10) : a),
 });
 const query = sql.type(employee)`
-SELECT * FROM (
-SELECT
-    employees.id,
-    employees.first_name AS "firstName",
-    employees.last_name AS "lastName",
-    employee_companies.salary,
-    companies.name AS company,
-    (end_date - start_date) AS employed_days,
-    companies.id AS company_id,
-    employee_companies.start_date AS "startDate",
-    employee_companies.end_date AS "endDate"
-FROM employees
-LEFT JOIN employee_companies
-    ON employees.id = employee_companies.employee_id
-LEFT JOIN companies
-    ON employee_companies.company_id = companies.id
-) employees
+SELECT *
 `;
+const fromFragment = sql.fragment`FROM (
+    SELECT
+        employees.id,
+        employees.first_name AS "firstName",
+        employees.last_name AS "lastName",
+        employee_companies.salary,
+        companies.name AS company,
+        (end_date - start_date) AS employed_days,
+        companies.id AS company_id,
+        employee_companies.start_date AS "startDate",
+        employee_companies.end_date AS "endDate"
+    FROM employees
+    LEFT JOIN employee_companies
+        ON employees.id = employee_companies.employee_id
+    LEFT JOIN companies
+        ON employee_companies.company_id = companies.id
+) employees`;
 
 export type {
     InferPayload, InferArgs
@@ -53,7 +54,7 @@ const sqliteCompatibility = true;
 export const employeeLoader = makeQueryLoader({
     query: {
         select: query,
-        from: sql.fragment``,
+        from: fromFragment,
     },
     // SQLite compatibility
     ...(sqliteCompatibility ? {
