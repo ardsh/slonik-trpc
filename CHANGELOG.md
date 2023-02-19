@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.10.1
+
+### Patch Changes
+
+-   1fd49a8: Fixed nullable columns cursor pagination
+
 ## 0.10.0
 
 ### Minor Changes
