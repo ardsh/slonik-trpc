@@ -5,16 +5,37 @@ import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, rec
 import { debug } from '../helpers/debug';
 import { fromCursor, toCursor } from "../helpers/cursors";
 
-const orderDirection = z.enum(["ASC", "DESC", "ASC NULLS LAST", "DESC NULLS LAST"]);
+const orderDirection = z.enum(["ASC", "DESC"]);
 type OrderDirection = z.infer<typeof orderDirection>;
-type OrderField = [string | [string, string] | [string, string, string] | FragmentSqlToken, z.infer<typeof orderDirection>];
+type SortField = string | [string, string] | [string, string, string] | FragmentSqlToken | {
+    field: FragmentSqlToken,
+    nullsLast?: boolean,
+    nullable?: boolean,
+};
+type OrderField = [SortField, z.infer<typeof orderDirection>];
+
+function isBasicSortFieldOption(field?: SortField): field is string | [string, string] | [string, string, string] | FragmentSqlToken {
+    return !(field as { field: FragmentSqlToken })?.field?.sql;
+}
+
+function getOrderFieldNullsLast(field?: SortField) {
+    return isBasicSortFieldOption(field) ? false : !!field?.nullsLast;
+}
+
+function getOrderFieldNullable(field?: SortField) {
+    return isBasicSortFieldOption(field) ? false : !!field?.nullable;
+}
 
 function getOrderByDirection(field: OrderField, reverse?: boolean) {
+    if (getOrderFieldNullsLast(field[0])) {
+        switch (field[1]) {
+        case 'ASC': return reverse ? sql.fragment`DESC NULLS FIRST` : sql.fragment`ASC NULLS LAST`;
+        case 'DESC': return reverse ? sql.fragment`ASC NULLS FIRST` : sql.fragment`DESC NULLS LAST`;
+        }
+    }
     switch (field[1]) {
     case 'ASC': return reverse ? sql.fragment`DESC` : sql.fragment`ASC`;
-    case 'ASC NULLS LAST': return reverse ? sql.fragment`DESC NULLS FIRST` : sql.fragment`ASC NULLS LAST`;
     case 'DESC': return reverse ? sql.fragment`ASC` : sql.fragment`DESC`;
-    case 'DESC NULLS LAST': return reverse ? sql.fragment`ASC NULLS FIRST` : sql.fragment`DESC NULLS LAST`;
     }
 }
 
@@ -25,7 +46,8 @@ function interpretFieldFragment(field: string | [string, string] | [string, stri
     return field;
 }
 function interpretOrderBy(field: OrderField, reverse?: boolean) {
-    return sql.fragment`${interpretFieldFragment(field[0])} ${getOrderByDirection(field, reverse)}`;
+    const basicField = isBasicSortFieldOption(field[0]) ? field[0] : field[0].field;
+    return sql.fragment`${interpretFieldFragment(basicField)} ${getOrderByDirection(field, reverse)}`;
 }
 
 type OptionalArray<T> = readonly T[] | T;
@@ -149,6 +171,7 @@ const countQueryType = z.object({
     count: z.number(),
 });
 
+
 function getSelectedKeys(allKeys: string[], selected?: readonly any[], excluded?: readonly any[]) {
     const noneSelected = !selected?.length;
     const noneExcluded = !excluded?.length;
@@ -229,7 +252,7 @@ export function makeQueryLoader<
      * ```
      * */
     sortableColumns?: {
-        [key in TSortable]: string | [string, string] | [string, string, string] | FragmentSqlToken
+        [key in TSortable]: SortField
     };
     /**
      * This option is convenient for fetching related columns together.
@@ -312,7 +335,14 @@ export function makeQueryLoader<
             (z.never() as never);
     const orderByWithoutTransform = z.tuple([sortFields, orderDirection]);
     const cursorColumns = "cursorcolumns";
-    const orderByType = z.tuple([sortFields.transform(field => options.sortableColumns?.[field] || field), orderDirection]);
+    const orderByType = z.tuple([sortFields.transform(field => {
+        const sortField = options.sortableColumns?.[field];
+        if (isBasicSortFieldOption(sortField)) {
+            return sortField || field;
+        } else {
+            return sortField?.field || field;
+        }
+    }), orderDirection]);
 
     const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], select?: readonly string[], ctx?: z.infer<TContextZod>): Promise<readonly T[]> => {
         if (!rows.length) return rows;
@@ -443,7 +473,7 @@ export function makeQueryLoader<
             }
         }
         if ((searchAfter || cursor) && orderExpressions?.length) {
-            const orderByExpressions = orderExpressions.map(parsed => [interpretFieldFragment(orderByType.parse(parsed)[0]), parsed[1], parsed[0]] as const);
+            const orderByExpressions = orderExpressions.map(parsed => [interpretFieldFragment(orderByType.parse(parsed)[0]), parsed[1], parsed[0], parsed] as const);
             const cursorValues = cursor ? fromCursor(cursor) : {} as never;
             conditions.push(
                 sql.fragment`(${sql.join(
@@ -457,17 +487,27 @@ export function makeQueryLoader<
                     expressions.map(([expression, direction, columnAlias], innerIndex) => {
                         let operator = sql.fragment`=`;
                         let nullFragment = sql.fragment`TRUE`;
+                        const orderField = options.sortableColumns?.[columnAlias];
                         const value = searchAfter ? searchAfter[columnAlias] : cursorValues[columnAlias];
+                        const isNullable = getOrderFieldNullable(orderField) || value === null;
+                        const nullsLast = getOrderFieldNullsLast(orderField);
+                        let isNull = false;
+                        const ascending = direction === (reverse ? "DESC" : "ASC")
                         if (innerIndex === expressions.length - 1) {
-                            operator = direction === (reverse ? "DESC" : "ASC")
-                                ? sql.fragment`>` : sql.fragment`<`;
-                            if (value === null) {
-                                nullFragment = sql.fragment`${expression} IS NOT NULL`;
+                            operator = ascending ? sql.fragment`>` : sql.fragment`<`;
+                            if (isNullable) {
+                                nullFragment = ascending || nullsLast ? sql.fragment`${expression} IS NULL`
+                                    : sql.fragment`${expression} IS NOT NULL`;
+                                isNull = ascending || nullsLast;
                             }
                         } else if (value === null) {
-                            nullFragment = sql.fragment`${expression} IS NULL`;
+                            nullFragment = ascending !== nullsLast ? sql.fragment`${expression} IS NOT NULL`
+                                : sql.fragment`${expression} IS NULL`;
+                            isNull = ascending === nullsLast;
                         }
-                        return value !== null && value !== undefined ? sql.fragment`${expression} ${operator} ${value}`
+                        return value !== null && value !== undefined ?
+                            isNullable && isNull ? sql.fragment`(${expression} ${operator} ${value} OR ${nullFragment})`
+                                : sql.fragment`${expression} ${operator} ${value}`
                             : nullFragment;
                     }), sql.fragment` AND `)})`;
                 }),

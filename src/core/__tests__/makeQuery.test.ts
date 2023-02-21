@@ -1033,7 +1033,7 @@ describe("withQueryLoader", () => {
         });
         const parser = loader.getLoadArgs({
             transformSortColumns(columns) {
-                expectTypeOf(columns).toEqualTypeOf<["value" | "id", "ASC" | "DESC" | "ASC NULLS LAST" | "DESC NULLS LAST"][] | null | undefined>();
+                expectTypeOf(columns).toEqualTypeOf<["value" | "id", "ASC" | "DESC"][] | null | undefined>();
                 if (Array.isArray(columns)) {
                     return [...columns, ["id", "ASC"]];
                 }
@@ -1474,7 +1474,11 @@ describe("withQueryLoader", () => {
                 from: sql.fragment`FROM test_table_bar`,
             },
             sortableColumns: {
-                id: "id",
+                id: {
+                    field: sql.fragment`"id"`,
+                    nullable: true,
+                    nullsLast: true,
+                },
                 upperValue: sql.fragment`UPPER(test_table_bar."value")`,
             },
         });
@@ -1485,19 +1489,19 @@ describe("withQueryLoader", () => {
                 upperValue: "AAA",
             },
             take: -2,
-            orderBy: [["upperValue", "DESC"], ["id", "DESC"]] as const
+            orderBy: [["upperValue", "DESC"], ["id", "ASC"]] as const
         };
         const query = loader.getQuery(args);
-        expect(query.sql).toContain(`(UPPER(test_table_bar."value") > $1) OR (UPPER(test_table_bar."value") = $2 AND "id" > $3)`)
-        expect(query.sql).toContain(`ORDER BY UPPER(test_table_bar."value") ASC, "id" ASC`)
+        expect(query.sql).toContain(`(UPPER(test_table_bar."value") > $1) OR (UPPER(test_table_bar."value") = $2 AND ("id" < $3 OR "id" IS NULL))`)
+        expect(query.sql).toContain(`ORDER BY UPPER(test_table_bar."value") ASC, "id" DESC`)
         const data = await loader.loadPagination(args);
         expect(data).toEqual({
             nodes: [{
                 id: 4,
                 value: "bbb",
             }, {
-                id: 3,
-                value: "bbb"
+                id: 1,
+                value: "aaa"
             }],
             pageInfo: {
                 hasPreviousPage: true,
@@ -1538,7 +1542,10 @@ describe("withQueryLoader", () => {
                 from: sql.fragment`FROM test_table_bar`,
             },
             sortableColumns: {
-                id: "id",
+                id: {
+                    field: sql.fragment`"id"`,
+                    nullable: true,
+                },
                 value: sql.fragment`"value"`,
             }
         });
@@ -1564,7 +1571,7 @@ describe("withQueryLoader", () => {
                 count: null,
             },
         });
-        expect(query.sql).toContain(`("id" > $1) OR ("id" = $2 AND TRUE)`)
+        expect(query.sql).toContain(`(("id" > $1 OR "id" IS NULL)) OR ("id" = $2 AND TRUE)`)
         expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
@@ -1579,7 +1586,10 @@ describe("withQueryLoader", () => {
                 from: sql.fragment`FROM test_table_bar`,
             },
             sortableColumns: {
-                id: "id",
+                id: {
+                    field: sql.fragment`"id"`,
+                    nullable: true,
+                },
                 value: sql.fragment`"value"`,
             }
         });
@@ -1596,14 +1606,16 @@ describe("withQueryLoader", () => {
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
         const query = loader.getQuery(parsed);
-        expect(query.sql).toContain(`("id" IS NOT NULL) OR ("id" IS NULL AND "value" > $1)`)
+        // nulls sort as if larger than any non-null value. 
+        // So NULLS FIRST is the default for DESC order, and NULLS LAST otherwise
+        expect(query.sql).toContain(`("id" IS NULL) OR ("id" IS NOT NULL AND "value" > $1)`)
         expect(query.sql).toContain(`ORDER BY "id" ASC, "value" ASC`)
         expectTypeOf(parsed.where).toEqualTypeOf<undefined>();
         const data = await loader.loadPagination(args);
         expect(data).toEqual({
             nodes: [{
-                id: 1,
-                value: "aaa"
+                id: 5,
+                value: "ccc"
             }],
             pageInfo: {
                 hasPreviousPage: true,
@@ -1633,7 +1645,11 @@ describe("withQueryLoader", () => {
             sortableColumns: {
                 id: "id",
                 email: "email",
-                dateOfBirth: sql.fragment`"date_of_birth"`,
+                dateOfBirth: {
+                    field: sql.fragment`"date_of_birth"`,
+                    nullable: true,
+                    nullsLast: true,
+                }
             }
         });
         const firstPage = await loader.loadPagination({
@@ -1657,15 +1673,46 @@ describe("withQueryLoader", () => {
             take: 1,
             takeCursors: true,
             orderBy: [["email", "ASC"], ["dateOfBirth", "DESC"], ["id", "ASC"]],
-        }).sql).toContain(`("email" > $1) OR ("email" = $2 AND "date_of_birth" IS NOT NULL) OR ("email" = $3 AND "date_of_birth" IS NULL AND "id" > $4)`);
+        }).sql).toContain(`("email" > $1) OR ("email" = $2 AND "date_of_birth" IS NULL) OR ("email" = $3 AND "date_of_birth" IS NOT NULL AND "id" > $4)`);
         expect(decodeCursors(firstPage.pageInfo)).toEqual({
             start: {
                 dateOfBirth: null,
-                id: "u",
+                id: "r",
             },
             end: {
+                dateOfBirth: null,
+                id: "s",
+            }
+        });
+        expect(loader.getQuery({
+            select: ['id', 'email', 'date_of_birth'],
+            searchAfter: {
+                dateOfBirth: "1993-04-01",
+                id: "w",
+            },
+            take: 2,
+            orderBy: [["dateOfBirth", "ASC"], ["id", "ASC"]],
+        }).sql).toContain(`(("date_of_birth" > $1 OR "date_of_birth" IS NULL)) OR ("date_of_birth" = $2 AND "id" > $3)`);
+        
+        const secondPage = await loader.loadPagination({
+            select: ['id', 'email', 'date_of_birth'],
+            searchAfter: {
+                dateOfBirth: "1993-04-01",
+                id: "w",
+            },
+            take: 2,
+            takeCount: true,
+            takeCursors: true,
+            orderBy: [["dateOfBirth", "ASC"], ["id", "DESC"]],
+        });
+        expect(decodeCursors(secondPage.pageInfo)).toEqual({
+            start: {
                 dateOfBirth: expect.any(String),
                 id: "v",
+            },
+            end: {
+                dateOfBirth: null,
+                id: "u",
             }
         });
     });

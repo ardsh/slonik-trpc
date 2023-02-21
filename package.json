@@ -1,6 +1,6 @@
 {
     "name": "slonik-trpc",
-    "version": "0.10.1",
+    "version": "0.10.2",
     "description": "Slonik tRPC loader",
     "main": "lib/index.js",
     "types": "lib/index.d.ts",
@@ -45,7 +45,7 @@
     "homepage": "https://github.com/ardsh/slonik-trpc#readme",
     "peerDependencies": {
         "slonik": ">=33",
-        "zod": ">=3"
+        "zod": "^3"
     },
     "dependencies": {
         "debug": "^4.3.4"
