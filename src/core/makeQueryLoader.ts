@@ -203,7 +203,15 @@ export function makeQueryLoader<
         /** The FROM part of the query. Should start with `FROM` */
         from?: SqlFragment,
         /** The GROUP BY part of the query. Don't include `GROUP BY` */
-        groupBy?: SqlFragment,
+        groupBy?: SqlFragment | ((args: LoadParameters<
+            z.infer<ZodPartial<TFilterTypes>>,
+            z.infer<TContextZod>,
+            TVirtuals & z.infer<TObject>,
+            (keyof (TVirtuals & z.infer<TObject>)) & TSelectable,
+            TSortable,
+            Exclude<keyof TGroups, number | symbol>,
+            boolean
+        >) => SqlFragment),
     },
     /** Optional parameter that can be used to override the slonik query parser.
      * Doesn't need to be used if you use sql.type when declaring the query parameter.
@@ -240,7 +248,7 @@ export function makeQueryLoader<
      * 
      * This will let users query only their own posts, if the posts table is in the query.
      * */
-    constraints?: (ctx: z.infer<TContextZod>) => SqlFragment | SqlFragment[] | null | undefined,
+    constraints?: (ctx: z.infer<TContextZod>) => Promise<SqlFragment | SqlFragment[] | null | undefined> | SqlFragment | SqlFragment[] | null | undefined,
     /**
      * Specify aliases for sortable columns. Can either be a single column, or a tuple of table name + column.
      * E.g.
@@ -376,7 +384,7 @@ export function makeQueryLoader<
             return rows;
         }
     }
-    const getQuery = <
+    const getQuery = async <
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
         TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
         TTakeCursors extends boolean = false,
@@ -401,8 +409,8 @@ export function makeQueryLoader<
         TTakeCursors
     >) => {
         const context = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
-        const filtersCondition = interpretFilters?.(where || ({} as any), context);
-        const authConditions = options?.constraints?.(context);
+        const filtersCondition = await interpretFilters?.(where || ({} as any), context);
+        const authConditions = await options?.constraints?.(context);
         const auth = Array.isArray(authConditions) ? authConditions : [authConditions].filter(notEmpty);
         const whereCondition = auth.length ? sql.fragment`(${sql.join(
             [...auth, filtersCondition].filter(notEmpty),
@@ -515,8 +523,20 @@ export function makeQueryLoader<
                 )})`
             );
         }
-        const groupExpression = queryComponents.groupBy?.sql ? [
-            queryComponents.groupBy,
+        const groupExpression = (queryComponents.groupBy) ? [
+            ...(typeof queryComponents.groupBy === 'function' ? [queryComponents.groupBy({
+                where,
+                take,
+                skip,
+                orderBy,
+                ctx,
+                cursor,
+                takeCursors,
+                searchAfter,
+                selectGroups,
+                select,
+            })] : []),
+            ...((queryComponents.groupBy as SqlFragment)?.sql ? [queryComponents.groupBy as SqlFragment] : []),
             lateralExpressions[0] ? sql.fragment`lateralcolumns.cursorjson` : null
         ].filter(notEmpty) : [];
 
@@ -658,7 +678,7 @@ export function makeQueryLoader<
             const db = database || options?.db;
             const reverse = !!args.take && args.take < 0;
             if (!db?.any) throw new Error("Database not provided");
-            const finalQuery = getQuery({
+            const finalQuery = await getQuery({
                 ...args,
                 take: typeof args.take === 'number' ? args.take : (options?.defaults?.take),
                 takeCursors: false,
@@ -724,12 +744,12 @@ export function makeQueryLoader<
                 throw new Error("orderBy must be specified when take parameter is negative!");
             }
             const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (take || 25) + 1;
-            const finalQuery = getQuery({
+            const finalQuery = await getQuery({
                 ...args,
                 take: // Query an extra row to see if the next page exists
                       (Math.min(Math.max(0, take || 100), (options.options?.maxLimit || 1000)) + extraItems) * reverse,
             });
-            const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${getQuery({
+            const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${await getQuery({
                 ...args,
                 skip: undefined,
                 searchAfter: undefined,

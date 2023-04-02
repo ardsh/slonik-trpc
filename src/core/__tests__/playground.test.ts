@@ -27,7 +27,7 @@ const selectionLoader = makeQueryLoader({
     query,
 });
 
-const selectedOnly = await db.any(selectionLoader.getQuery({
+const selectedOnly = await db.any(await selectionLoader.getQuery({
     select: ["id", "first_name"],
 }));
 
@@ -44,7 +44,7 @@ const sortableLoader = makeQueryLoader({
 });
 
 
-const sortedByName = await db.any(sortableLoader.getQuery({
+const sortedByName = await db.any(await sortableLoader.getQuery({
     orderBy: ["first_name", "ASC"],
 }));
 

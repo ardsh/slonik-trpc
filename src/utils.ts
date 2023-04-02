@@ -14,6 +14,7 @@ export {
 
 export {
     mergeFilters,
+    makeFilter,
     createFilters
 } from './core/queryFilter';
 

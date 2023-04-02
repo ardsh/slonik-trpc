@@ -73,7 +73,7 @@ describe("withQueryLoader", () => {
                 from: sql.fragment`FROM test_table_bar`,
             },
         });
-        const query = loader.getQuery({
+        const query = await loader.getQuery({
             select: ['id'],
         });
 
@@ -346,13 +346,13 @@ describe("withQueryLoader", () => {
                 value: ["test_table_bar", "value"],
             },
         });
-        expect(() => loader.getQuery({
+        await expect(loader.getQuery({
             // @ts-expect-error id is not sortable
             orderBy: ["id", "ASC"],
-        })).toThrow();
-        expect(loader.getQuery({
+        })).rejects.toThrow();
+        expect((await loader.getQuery({
             orderBy: ["value", "DESC"],
-        }).sql).toContain(`"value" DESC`)
+        })).sql).toContain(`"value" DESC`)
     });
 
     it("Allows ordering by multiple columns", async () => {
@@ -367,12 +367,12 @@ describe("withQueryLoader", () => {
                 id: "id",
             },
         });
-        expect(loader.getQuery({
+        expect((await loader.getQuery({
             orderBy: [["id", "ASC"], ["value", "DESC"]],
-        }).sql).toContain(`"id" ASC, "test_table_bar"."value" DESC`);
-        expect(loader.getQuery({
+        })).sql).toContain(`"id" ASC, "test_table_bar"."value" DESC`);
+        expect((await loader.getQuery({
             orderBy: ["value", "DESC"],
-        }).sql).toContain(`"value" DESC`)
+        })).sql).toContain(`"value" DESC`)
         expect(await loader.load({
             orderBy: [["value", "DESC"], ["id", "ASC"]],
         })).toMatchSnapshot();
@@ -390,12 +390,12 @@ describe("withQueryLoader", () => {
                 id: "id",
             },
         });
-        expect(loader.getQuery({
+        expect((await loader.getQuery({
             orderBy: [["id", "ASC"], ["value", "DESC"]],
-        }).sql).toContain(`"id" ASC, COALESCE("uid", "value") DESC`);
-        expect(loader.getQuery({
+        })).sql).toContain(`"id" ASC, COALESCE("uid", "value") DESC`);
+        expect((await loader.getQuery({
             orderBy: ["value", "DESC"],
-        }).sql).toContain(`COALESCE("uid", "value") DESC`)
+        })).sql).toContain(`COALESCE("uid", "value") DESC`)
         expect(await loader.load({
             orderBy: [["value", "DESC"], ["id", "ASC"]],
         })).toMatchSnapshot();
@@ -412,13 +412,13 @@ describe("withQueryLoader", () => {
                 date: "date"
             },
         });
-        expect(() => loader.getQuery({
+        await expect(loader.getQuery({
             // @ts-expect-error value is not sortable
             orderBy: ["value", "ASC"]
-        })).toThrow();
-        expect(loader.getQuery({
+        })).rejects.toThrow();
+        expect((await loader.getQuery({
             orderBy: ["date", "DESC"],
-        }).sql).toContain(`"date" DESC`);
+        })).sql).toContain(`"date" DESC`);
         expect(await loader.load({
             orderBy: ["date", "DESC"],
         })).toEqual(expect.arrayContaining([]));
@@ -435,10 +435,10 @@ describe("withQueryLoader", () => {
                 date: "date"
             },
         });
-        expect(() => loader.getQuery({
+        await expect(loader.getQuery({
             // @ts-expect-error blabla is not a valid sort direction
             orderBy: ["date", "blabla"]
-        })).toThrow(/Invalid enum value./);
+        })).rejects.toThrow(/Invalid enum value./);
     });
 
     it("Allows defining filters", async () => {
@@ -459,7 +459,7 @@ describe("withQueryLoader", () => {
                 }
             }
         });
-        const query = await loader.getQuery({
+        const query = await await loader.getQuery({
             take: 1,
             where: {
                 largeIds: true,
@@ -740,7 +740,7 @@ describe("withQueryLoader", () => {
             },
         });
         const take = 1;
-        const query = await loader.getQuery({
+        const query = await await loader.getQuery({
             takeCursors: true,
             take,
             orderBy: ["id", "ASC"],
@@ -884,9 +884,9 @@ describe("withQueryLoader", () => {
             orderBy: ["id", "ASC"],
             select: ["asdf", "id"],
         })).toThrowErrorMatchingSnapshot();
-        expect(() => loader.getQuery({
+        await expect(loader.getQuery({
             orderBy: [["id", "ASC"]] as any,
-        })).toThrow(/Invalid enum value/);
+        })).rejects.toThrow(/Invalid enum value/);
     });
 
     it("Allows sorting by valid columns", async () => {
@@ -1141,7 +1141,7 @@ describe("withQueryLoader", () => {
             ...genericOptions,
             selectableColumns: ["id", "uid"],
         });
-        const selectable = loader.getQuery({
+        const selectable = await loader.getQuery({
             // @ts-expect-error value is not selectable
             select: ["id", "value", "uid"]
         });
@@ -1247,7 +1247,7 @@ describe("withQueryLoader", () => {
                 from: sql.fragment`FROM test_table_bar`,
             }
         });
-        const query = loader.getQuery({
+        const query = await loader.getQuery({
             select: ['id'],
             take: 1,
         });
@@ -1269,7 +1269,7 @@ describe("withQueryLoader", () => {
                     count: z.number(),
                 }))`SELECT value, COUNT(*)`,
                 from: sql.fragment`FROM test_table_bar`,
-                groupBy: sql.fragment`test_table_bar.value`,
+                groupBy: () => sql.fragment`test_table_bar.value`,
             },
             filters: genericOptions.filters,
             sortableColumns: {
@@ -1399,7 +1399,7 @@ describe("withQueryLoader", () => {
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
         const data = await loader.loadPagination(parsed);
-        const query = loader.getQuery(args);
+        const query = await loader.getQuery(args);
         expect(data).toEqual({
             nodes: [{
                 id: 1,
@@ -1441,7 +1441,7 @@ describe("withQueryLoader", () => {
             take: 1,
             orderBy: [["upperValue", "DESC"], ["id", "DESC"]] as const
         };
-        const query = loader.getQuery(args);
+        const query = await loader.getQuery(args);
         expect(query.sql).toContain(`(UPPER("value") < $1) OR (UPPER("value") = $2 AND "id" < $3)`)
         expect(query.sql).toContain(`ORDER BY UPPER("value") DESC, "id" DESC`)
         const data = await loader.loadPagination(args);
@@ -1491,7 +1491,7 @@ describe("withQueryLoader", () => {
             take: -2,
             orderBy: [["upperValue", "DESC"], ["id", "ASC"]] as const
         };
-        const query = loader.getQuery(args);
+        const query = await loader.getQuery(args);
         expect(query.sql).toContain(`(UPPER(test_table_bar."value") > $1) OR (UPPER(test_table_bar."value") = $2 AND ("id" < $3 OR "id" IS NULL))`)
         expect(query.sql).toContain(`ORDER BY UPPER(test_table_bar."value") ASC, "id" DESC`)
         const data = await loader.loadPagination(args);
@@ -1558,7 +1558,7 @@ describe("withQueryLoader", () => {
             orderBy: [["id", "ASC"], ["value", "ASC"]] as const
         };
         const data = await loader.loadPagination(args);
-        const query = loader.getQuery(args);
+        const query = await loader.getQuery(args);
         expect(data).toEqual({
             nodes: [{
                 id: 2,
@@ -1605,7 +1605,7 @@ describe("withQueryLoader", () => {
         };
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
-        const query = loader.getQuery(parsed);
+        const query = await loader.getQuery(parsed);
         // nulls sort as if larger than any non-null value. 
         // So NULLS FIRST is the default for DESC order, and NULLS LAST otherwise
         expect(query.sql).toContain(`("id" IS NULL) OR ("id" IS NOT NULL AND "value" > $1)`)
@@ -1663,7 +1663,7 @@ describe("withQueryLoader", () => {
             takeCursors: true,
             orderBy: [["dateOfBirth", "DESC"], ["id", "ASC"]],
         });
-        expect(loader.getQuery({
+        expect((await loader.getQuery({
             select: ['id', 'email', 'date_of_birth'],
             searchAfter: {
                 dateOfBirth: null,
@@ -1673,7 +1673,7 @@ describe("withQueryLoader", () => {
             take: 1,
             takeCursors: true,
             orderBy: [["email", "ASC"], ["dateOfBirth", "DESC"], ["id", "ASC"]],
-        }).sql).toContain(`("email" > $1) OR ("email" = $2 AND "date_of_birth" IS NULL) OR ("email" = $3 AND "date_of_birth" IS NOT NULL AND "id" > $4)`);
+        })).sql).toContain(`("email" > $1) OR ("email" = $2 AND "date_of_birth" IS NULL) OR ("email" = $3 AND "date_of_birth" IS NOT NULL AND "id" > $4)`);
         expect(decodeCursors(firstPage.pageInfo)).toEqual({
             start: {
                 dateOfBirth: null,
@@ -1684,7 +1684,7 @@ describe("withQueryLoader", () => {
                 id: "s",
             }
         });
-        expect(loader.getQuery({
+        expect((await loader.getQuery({
             select: ['id', 'email', 'date_of_birth'],
             searchAfter: {
                 dateOfBirth: "1993-04-01",
@@ -1692,7 +1692,7 @@ describe("withQueryLoader", () => {
             },
             take: 2,
             orderBy: [["dateOfBirth", "ASC"], ["id", "ASC"]],
-        }).sql).toContain(`(("date_of_birth" > $1 OR "date_of_birth" IS NULL)) OR ("date_of_birth" = $2 AND "id" > $3)`);
+        })).sql).toContain(`(("date_of_birth" > $1 OR "date_of_birth" IS NULL)) OR ("date_of_birth" = $2 AND "id" > $3)`);
         
         const secondPage = await loader.loadPagination({
             select: ['id', 'email', 'date_of_birth'],
@@ -1848,7 +1848,7 @@ describe("withQueryLoader", () => {
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
         const data = await loader.loadPagination(parsed);
-        const query = loader.getQuery(args);
+        const query = await loader.getQuery(args);
         const endCursor = data.pageInfo.endCursor;
         expect(data).toEqual({
             cursors: ["eyJpZCI6MSwidmFsdWUiOiJhYWEifQ=="],
@@ -1898,7 +1898,7 @@ describe("withQueryLoader", () => {
         const parser = loader.getLoadArgs();
         const parsed = parser.parse(args);
         const data = await loader.loadPagination(parsed);
-        const query = loader.getQuery(args);
+        const query = await loader.getQuery(args);
         const endCursor = data.pageInfo.endCursor;
         expect(data).toEqual({
             cursors: ["eyJpZCI6MSwidmFsdWUiOiJhYWEifQ=="],
@@ -1951,7 +1951,7 @@ describe("withQueryLoader", () => {
             ...parsed,
             takeCursors: true,
         });
-        const query = loader.getQuery(args);
+        const query = await loader.getQuery(args);
         expect(data).toEqual({
             cursors: [
                 "eyJpZCI6NCwidmFsdWUiOiJiYmIifQ==",
@@ -2102,7 +2102,7 @@ describe("withQueryLoader", () => {
 
         expect(spy).toHaveBeenCalledWith(3);
         expect(data).toEqual([]);
-        const query = loader.getQuery({
+        const query = await loader.getQuery({
             take: 1,
             where: {
                 OR: [{
@@ -2122,7 +2122,7 @@ describe("withQueryLoader", () => {
                 return [sql.fragment`TRUE`, sql.fragment`TRUE`];
             },
         });
-        const query = loader.getQuery({
+        const query = await loader.getQuery({
             take: 1,
         });
         expect(query.sql).toContain("WHERE ((TRUE) AND (TRUE)");

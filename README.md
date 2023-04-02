@@ -302,11 +302,11 @@ const sortableLoader = makeQueryLoader({
     },
 });
 
-const sortedByName = await db.any(sortableLoader.getQuery({
+const sortedByName = await db.any(await sortableLoader.getQuery({
     orderBy: ["name", "ASC"],
 }));
 
-const sortedByNameAndDate = await db.any(sortableLoader.getQuery({
+const sortedByNameAndDate = await db.any(await sortableLoader.getQuery({
     orderBy: [["name", "DESC"], ["id", "ASC"]],
     take: 5,
 }))
@@ -317,7 +317,7 @@ If you don't specify any sortableColumns your API won't be sortable with orderBy
 If you specify a negative take, the order will be reversed, this is useful for getting the last page...
 
 ```ts
-const lastPage = await db.any(sortableLoader.getQuery({
+const lastPage = await db.any(await sortableLoader.getQuery({
     orderBy: [["name", "DESC"], ["id", "ASC"]],
     take: -25,
 }));
@@ -366,7 +366,7 @@ const bigPostsCount = await sortableLoader.load({
 If you've enabled any sorting columns, you can use cursor-based pagination with `cursur`. Simply specify the cursor of the item you'd like to paginate after.
 
 ```ts
-const usersAfterBob = await db.any(sortableLoader.getQuery({
+const usersAfterBob = await db.any(await sortableLoader.getQuery({
     orderBy: [["name", "DESC"], ["id", "ASC"]],
     cursor: "eyJuYW1lIjoiQm9iIiwiaWQiOjQ1fQ==",
     take: 5,
@@ -378,7 +378,7 @@ const usersAfterBob = await db.any(sortableLoader.getQuery({
 You can also do prisma-style cursor pagination by supplying the values yourself.
 
 ```ts
-const usersAfterBob = await db.any(sortableLoader.getQuery({
+const usersAfterBob = await db.any(await sortableLoader.getQuery({
     orderBy: [["name", "DESC"], ["id", "ASC"]],
     searchAfter: {
         name: "Bob",

@@ -10,7 +10,7 @@ export type Interpretors<
         filter: z.infer<TFilter[x]>,
         allFilters: z.infer<z.ZodObject<TFilter>>, // Does this need ZodRecursive or not?
         context: TContext
-    ) => SqlFragment | null | undefined | false;
+    ) => Promise<SqlFragment | null | undefined | false> | SqlFragment | null | undefined | false;
 };
 
 export type RecursiveFilterConditions<TFilter, TDisabled extends "AND" | "OR" | "NOT"=never> = TFilter & Omit<{
@@ -133,13 +133,13 @@ export function makeFilter<
     type ActualFilters = RecursiveFilterConditions<
         z.infer<ZodPartial<TFilter>>
     >;
-    const interpretFilter = (filter: ActualFilters, context?: TContext) => {
+    const interpretFilter = async (filter: ActualFilters, context?: TContext) => {
         const conditions = [] as SqlFragment[];
         const addCondition = (item: SqlFragment | null) =>
             item && conditions.push(item);
-        Object.keys(filter).forEach((key: string) => {
+        for (const key of Object.keys(filter)) {
             const interpreter = interpreters[key as never] as any;
-            const condition = interpreter?.(
+            const condition = await interpreter?.(
                 filter[key as never],
                 filter as TFilter,
                 context
@@ -147,17 +147,17 @@ export function makeFilter<
             if (condition) {
                 addCondition(condition);
             }
-        });
+        }
         if (filter.OR?.length) {
-            const orConditions = filter.OR.map((or) => {
-                const orFilter = interpretFilter(or, context);
+            const orConditions = await Promise.all(filter.OR.map(async (or) => {
+                const orFilter = await interpretFilter(or, context);
                 return orFilter?.length
                     ? sql.fragment`(${sql.join(
                           orFilter,
                           sql.fragment`) AND (`
                       )})`
                     : null;
-            }).filter(notEmpty);
+            })).then(filters => filters.filter(notEmpty));
             if (orConditions?.length) {
                 addCondition(
                     sql.fragment`(${sql.join(
@@ -168,15 +168,15 @@ export function makeFilter<
             }
         }
         if (filter.AND?.length) {
-            const andConditions = filter.AND.map((and) => {
-                const andFilter = interpretFilter(and, context);
+            const andConditions = await Promise.all(filter.AND.map(async (and) => {
+                const andFilter = await interpretFilter(and, context);
                 return andFilter?.length
                     ? sql.fragment`(${sql.join(
                           andFilter,
                           sql.fragment`) AND (`
                       )})`
                     : null;
-            }).filter(notEmpty);
+            })).then(filters => filters.filter(notEmpty));
             if (andConditions?.length) {
                 addCondition(
                     sql.fragment`(${sql.join(
@@ -187,7 +187,7 @@ export function makeFilter<
             }
         }
         if (filter.NOT) {
-            const notFilter = interpretFilter(filter.NOT, context);
+            const notFilter = await interpretFilter(filter.NOT, context);
             if (notFilter.length) {
                 addCondition(
                     sql.fragment`NOT (${sql.join(
@@ -201,8 +201,8 @@ export function makeFilter<
         // return sql.fragment`(${sql.join(conditions, sql.fragment`) AND (`)})`;
         return conditions;
     };
-    const getConditions = (filters: ActualFilters, context?: TContext) => {
-        const conditions = interpretFilter(
+    const getConditions = async (filters: ActualFilters, context?: TContext) => {
+        const conditions = await interpretFilter(
             options?.preprocess?.(filters, context) || filters,
             context
         );
@@ -210,8 +210,8 @@ export function makeFilter<
             options?.postprocess?.(conditions, filters, context) || conditions
         );
     };
-    const getWhereFragment = (filter: ActualFilters, context?: TContext) => {
-        const conditions = getConditions(filter, context);
+    const getWhereFragment = async (filter: ActualFilters, context?: TContext) => {
+        const conditions = await getConditions(filter, context);
         return conditions?.length
             ? sql.fragment`(${sql.join(conditions, sql.fragment`)\n AND (`)})\n`
             : sql.fragment`TRUE`;

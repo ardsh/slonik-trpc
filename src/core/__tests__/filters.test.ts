@@ -11,10 +11,13 @@ const filtersOptions = createFilters()({
     date: dateFilterType
 }, {
     id: (text) => sql.fragment`"id" = ${text}`,
-    date: (date) => dateFilter(date, sql.fragment`"date"`),
+    date: async (date) => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return dateFilter(date, sql.fragment`"date"`);
+    },
     // If true is specified, id must be greater than 5
     largeIds: (filter) => booleanFilter(filter, sql.fragment`"id" > 5`),
-    uid: (uids) => arrayFilter(uids, sql.fragment`"uid"`),
+    uid: async (uids) => arrayFilter(uids, sql.fragment`"uid"`),
 }, {
     postprocess(conditions) {
         conditions.push(sql.fragment`uid = 'x'`)
@@ -65,8 +68,8 @@ addFilter("AND Filters nested with OR", ({
 }));
 
 it.each(filters)(
-    "%s", (description, data) => {
-        expect(getConditions(data)).toMatchSnapshot();
+    "%s", async (description, data) => {
+        expect(await getConditions(data)).toMatchSnapshot();
     }
 );
 
@@ -131,7 +134,7 @@ addCombinedFilter("AND Filters deeply nested with OR", ({
 }));
 
 it.each(combined)(
-    "%s", (description, data) => {
-        expect(getCombinedConditions(data)).toMatchSnapshot();
+    "%s", async (description, data) => {
+        expect(await getCombinedConditions(data)).toMatchSnapshot();
     }
 );
