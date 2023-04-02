@@ -1,5 +1,14 @@
 # slonik-trpc
 
+## 0.11.0
+
+### Minor Changes
+
+-   8402cef: BREAKING CHANGE:
+    `getQuery` is now asynchronous.
+
+    Filter interpreters can be asynchronous.
+
 ## 0.10.1
 
 ### Patch Changes
