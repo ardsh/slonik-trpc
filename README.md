@@ -4,11 +4,52 @@
 ![Coverage](coverage/badge.svg)
 ![License](https://img.shields.io/npm/l/slonik-trpc)
 
-`slonik-trpc` is an API engine for creating type-safe querying APIs with SQL queries, using [slonik](https://github.com/gajus/slonik) and [zod](https://github.com/colinhacks/zod).
+[Convert any SQL query](https://theartofpostgresql.com/blog/2019-09-the-r-in-orm) into an API.
 
-In short, it allows you to [convert any query](https://theartofpostgresql.com/blog/2019-09-the-r-in-orm) into a full-blown API, with cursor pagination, authorization checks, sorting, custom filtering and more, using only small composable SQL fragments and zod types.
+## Usage
 
-## Features
+```sh
+yarn add slonik-trpc
+yarn add slonik@33 zod@3
+```
+
+```ts
+import { sql } from 'slonik';
+import { z } from 'zod';
+import { makeQueryLoader } from 'slonik-trpc';
+
+const loader = makeQueryLoader({
+    db: slonikConnection, // any DB connection will do
+    query: {
+        select: sql.type(z.object({
+            id: z.string(),
+            name: z.string(),
+            age: z.number(),
+            // Any slonik query will do
+		}))`
+		SELECT id,
+			name,
+			EXTRACT(NOW() - created_at) AS age
+		`,
+        // The from fragment of the query is separated from the select portion.
+        from: sql.fragment`FROM users`,
+    }
+});
+```
+
+Query this loader/API by selecting just the fields you need.
+
+```ts
+// The users type will return only id and age
+const users = await loader.load({
+    select: ["id", "age"],
+    take: 200,
+});
+```
+
+Read on for more advanced usage, including how to use sorting, filtering, cursor pagination, authorization checks, creating a tRPC API and more.
+
+### List of features
 
 - [x] Declarative [filtering API](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/filtering) (filter creation utils included!)
   - [x] Automatic support for `AND`, `NOT`, `OR` in all the filters
@@ -23,87 +64,45 @@ In short, it allows you to [convert any query](https://theartofpostgresql.com/bl
 - [x] [Cursor-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/cursor-pagination).
   - [x] Reverse page support
 
-## Installation
-
 ### Requirements
 
 TypeScript 4.5+
 Slonik 33+
 Zod 3+
 
-```bash
-yarn add slonik-trpc
-```
-
 ### Demo
 
 Here's a [demo](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datagrid-example) example table in codesandbox, that utilizes a SQLite-compatible mode for generating the queries.
 
-## Usage
+### [Documentation](https://ardsh.github.io/slonik-trpc/)
 
-Declare the query as you would normally with slonik.
+You can refer to [the documentation](https://ardsh.github.io/slonik-trpc/) for advanced use-cases and tutorials.
+
+## Advanced Usage
+
+### Custom queries
+
+Let's say you want to add a custom sub-query as a field to your relation.
+You can do this very easily.
 
 ```ts
-const userType = z.object({
+const query = sql.type(z.object({
     id: z.string(),
     name: z.string(),
     email: z.string(),
+    authoredPosts: z.number(),
     created_at: z.string()
-});
-const usersSelect = sql.type(userType)`SELECT id, name, email, created_at`;
+}))`SELECT *,
+    -- Count all the posts of the user as a number
+    (SELECT COUNT(*) FROM posts WHERE posts.author = users.id) AS "authoredPosts"`;
+const fromFragment = sql.fragment`FROM users`;
 ```
 
-This is enough to create a type-safe API
+Note this count sub-query will be called only when the authoredPosts selected. Otherwise the database won't execute it, ensuring optimal performance.
 
-```ts
-import { makeQueryLoader } from 'slonik-trpc';
+### [tRPC API](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/trpc)
 
-const loader = makeQueryLoader({
-    db: slonikConnection,
-    query: {
-        select: usersSelect,
-        from: sql.fragment`FROM users`,
-    },
-    sortableColumns: {
-        id: ["users", "id"],
-        createdAt: ["users", "created_at"],
-    }
-});
-```
-
-It can be called via typescript, providing full type-safety.
-
-```ts
-const users = await loader.load({
-    orderBy: ["createdAt", "DESC"],
-    select: ["id", "email", "createdAt"],
-    take: 200,
-});
-// Returns 200 user objects sorted by createdAt descending
-
-const users = await loader.loadPagination({
-    // searchAfter for usage in cursorPagination
-    searchAfter: {
-        id: "abc",
-        // Returns only users created after march 15th
-        createdAt: "2023-03-15T12:45Z",
-    },
-    orderBy: [["createdAt", "ASC"], ["id", "ASC"]],
-    select: ["id", "email", "createdAt"],
-    take: 100,
-});
-
-// This is equivalent (endCursor+startCursor are returned from loadPagination)
-const users = await loader.load({
-    cursor: "eyJpZCI6ICJhYmMiLCJjcmVhdGVkQXQiOiAiMjAyMy0wMy0xNVQxMjo0NVoifQ==",
-    // Base64-encoded opaque cursor
-    orderBy: [["createdAt", "ASC"], ["id", "ASC"]],
-    select: ["id", "email", "createdAt"],
-    take: 100,
-});
-```
-
-You can [plug this loader](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/trpc) into any tRPC query procedure, and it will provide an API for querying in the clientside.
+Use `loader.getLoadArgs` for getting the tRPC query input zod type.
 
 ```ts
 getUsers: publicProcedure
@@ -125,42 +124,13 @@ Now it can be called via tRPC:
 
 ```ts
 const users = await client.getUsers.query({
-    select: ["id", "title", "content"], // Will query only these 3 columns, ignoring the rest
-    orderBy: [["createdAt", "DESC"], ["id", "ASC"]],
+    select: ["id", "name", "email"], // Will query only these 3 columns, ignoring the rest
     take: 25,
     skip: 0,
 });
 ```
 
 This returns a relay-like pagination result, with `nodes` and `pageInfo` keys.
-
-From here on, you only need to add more options to your loader, to make the API more thorough and customized to your needs. You have full control over what SQL is being executed, and can get the raw SQL query using `getQuery`.
-
-### [Documentation](https://ardsh.github.io/slonik-trpc/)
-
-You can refer to [the documentation](https://ardsh.github.io/slonik-trpc/) for advanced use-cases and tutorials.
-
-### Custom queries
-
-Let's say you want to add a custom sub-query as a field to your relation.
-You can do this very easily.
-
-```ts
-const query = sql.type(z.object({
-    id: z.string(),
-    name: z.string(),
-    email: z.string(),
-    authoredPosts: z.number(),
-    created_at: z.string()
-}))`SELECT * FROM
-(SELECT *,
-    -- Count all the posts of the user as a number
-    (SELECT COUNT(*) FROM posts WHERE posts.author = users.id) AS "authoredPosts"
-FROM users
-) AS users`;
-```
-
-Note this sub-query will be called only when the authoredPosts is a selected field. Otherwise the database won't execute it, ensuring optimal performance.
 
 ### Filtering
 
