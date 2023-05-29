@@ -2127,4 +2127,41 @@ describe("withQueryLoader", () => {
         });
         expect(query.sql).toContain("WHERE ((TRUE) AND (TRUE)");
     });
+
+    it("distinctOn can be used with sortable columns", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            sortableColumns: {
+                value: ["test_table_bar", "value"],
+                id: sql.fragment`test_table_bar."id"`,
+            },
+        });
+        const query = await loader.getQuery({
+            take: 1,
+            distinctOn: ["value"],
+        });
+        expect(query.sql).toContain(`SELECT DISTINCT ON ("test_table_bar"."value")`);
+        expect(query.sql).toContain(`ORDER BY "test_table_bar"."value" ASC`);
+    });
+
+    it("distinctOn adds orderBy fragments in front", async () => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            query: {
+                ...genericOptions.query,
+                select: sql.type(zodType)`SELECT DISTINCT *`,
+            },
+            sortableColumns: {
+                value: ["test_table_bar", "value"],
+                id: sql.fragment`test_table_bar."id"`,
+            },
+        });
+        const query = await loader.getQuery({
+            take: 1,
+            orderBy: [["id", "DESC"], ["value", "DESC"]],
+            distinctOn: ["value"],
+        });
+        expect(query.sql).toContain(`SELECT DISTINCT ON ("test_table_bar"."value")`);
+        expect(query.sql).toContain(`ORDER BY "test_table_bar"."value" DESC, test_table_bar."id" DESC`);
+    });
 });

@@ -60,6 +60,7 @@ Read on for more advanced usage, including how to use sorting, filtering, cursor
 - [x] Optional runtime validation of output (Your zod types can be executed against your result, including transforming the output fields with zod transformers).
 - [x] [Virtual field](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/virtual-columns) declaration in typescript (fully type-safe + with async support).
 - [x] [Declarative sorting](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/sorting) capabilities, with support for custom SQL sorting expressions
+- [x] [DISTINCT ON](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/distinct) support with PostgreSQL, for all sortable columns
 - [x] [Offset-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/pagination).
 - [x] [Cursor-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/cursor-pagination).
   - [x] Reverse page support
@@ -291,6 +292,18 @@ const lastPage = await db.any(await sortableLoader.getQuery({
     orderBy: [["name", "DESC"], ["id", "ASC"]],
     take: -25,
 }));
+```
+
+### Distinct On
+
+You can additionally use `sortableColumns` in the `distinctOn` option.
+To get only posts by distinct authors use this:
+
+```ts
+const distinctAuthors = await db.any(await sortableLoader.getQuery({
+    distinctOn: ["name"],
+    take: 5,
+}))
 ```
 
 ### Grouping

@@ -148,6 +148,23 @@ type LoadParameters<
      * ```
      * */
     orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
+    /** The DISTINCT ON part of the query.
+     * If not null, it will automatically reorder the orderBy fragments, to put distinct fields in front of orderBy.
+     * If the fields aren't specified in orderBy, they will be added in front, with ascending order.
+     *
+     * Use this with postgres only to select distinct rows based on a column.
+     * E.g.
+     * ```ts
+     * distinctOn: ["id"]
+     * ```
+     * Will generate
+     * ```sql
+     * SELECT DISTINCT ON ("id") * FROM ...
+     * ```
+     * 
+     * If specified `true`, only distinct rows are returned `SELECT DISTINCT`
+     * */
+    distinctOn?: OptionalArray<TSortable> | null;
     /* Pass the context that will be used for filters postprocessing and virtual field resolution */
     ctx?: TContext;
     where?: RecursiveFilterConditions<TFilter>;
@@ -324,10 +341,10 @@ export function makeQueryLoader<
     if (!fromFragment) {
         console.warn("Deprecation warning: Specify query.from and query.select separately in makeQueryLoader", query?.sql);
     }
-    if (fromFragment && fromFragment.sql?.length > 5 && !fromFragment?.sql?.match?.(/^\s*FROM/)) {
+    if (fromFragment && fromFragment.sql?.length > 5 && !fromFragment?.sql?.match?.(/^\s*FROM/i)) {
         throw new Error("query.from must begin with FROM");
     }
-    if (!query?.sql?.match?.(/^\s*SELECT/)) {
+    if (!query?.sql?.match?.(/^\s*SELECT/i)) {
         throw new Error("Your query must begin with SELECT");
     }
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
@@ -343,14 +360,15 @@ export function makeQueryLoader<
             (z.never() as never);
     const orderByWithoutTransform = z.tuple([sortFields, orderDirection]);
     const cursorColumns = "cursorcolumns";
-    const orderByType = z.tuple([sortFields.transform(field => {
+    const sortFieldWithTransform = sortFields.transform(field => {
         const sortField = options.sortableColumns?.[field];
         if (isBasicSortFieldOption(sortField)) {
             return sortField || field;
         } else {
             return sortField?.field || field;
         }
-    }), orderDirection]);
+    });
+    const orderByType = z.tuple([sortFieldWithTransform, orderDirection]);
 
     const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], select?: readonly string[], ctx?: z.infer<TContextZod>): Promise<readonly T[]> => {
         if (!rows.length) return rows;
@@ -388,18 +406,7 @@ export function makeQueryLoader<
         TSelect extends keyof (TVirtuals & z.infer<TObject>) = string,
         TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
         TTakeCursors extends boolean = false,
-    >({
-        where,
-        take,
-        skip,
-        orderBy=options?.defaults?.orderBy,
-        ctx,
-        cursor,
-        takeCursors,
-        searchAfter,
-        selectGroups,
-        select,
-    }: LoadParameters<
+    >(allArgs: LoadParameters<
         TFilter,
         z.infer<TContextZod>,
         TVirtuals & z.infer<TObject>,
@@ -408,6 +415,21 @@ export function makeQueryLoader<
         TGroupSelected,
         TTakeCursors
     >) => {
+        let {
+            take,
+            select,
+        } = allArgs;
+        const {
+            where,
+            skip,
+            orderBy=options?.defaults?.orderBy,
+            distinctOn,
+            ctx,
+            cursor,
+            takeCursors,
+            searchAfter,
+            selectGroups,
+        } = allArgs;
         const context = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
         const filtersCondition = await interpretFilters?.(where || ({} as any), context);
         const authConditions = await options?.constraints?.(context);
@@ -428,8 +450,28 @@ export function makeQueryLoader<
             throw new Error("orderBy must be specified when take parameter is negative!");
         }
         const noneSelected = !select?.length;
+        const distinctFields = Array.isArray(distinctOn) ? distinctOn?.map(distinct => sortFields.parse(distinct)) :
+            distinctOn?.length ? [sortFields.parse(distinctOn)] : null;
         const orderExpressions = Array.isArray(orderBy?.[0]) ? orderBy?.map(order => orderByWithoutTransform.parse(order)) :
-            orderBy?.length ? [orderByWithoutTransform.parse(orderBy)] : null;
+            orderBy?.length ? [orderByWithoutTransform.parse(orderBy)] : distinctFields?.length ? [] : null;
+        if (distinctFields?.length) {
+            const distinctExpressions = distinctFields.map(field => interpretFieldFragment(sortFieldWithTransform.parse(field)));
+            const distinctQuery = sql.fragment`SELECT DISTINCT ON (${sql.join(distinctExpressions, sql.fragment`, `)})`;
+            // Hacky way to add DISTINCT ON (must be done towards the end...)
+            actualQuery = {
+                ...actualQuery,
+                sql: query.sql.replace(/^\n*(\W\n?)*SELECT( DISTINCT)?/i, distinctQuery.sql),
+            };
+            for (const expression of distinctFields.reverse()) {
+                // Reverse to make sure unshift is done in the correct order
+                const orderPosition = orderExpressions?.findIndex(([field]) => field === expression);
+                if (typeof orderPosition === 'number' && orderPosition >= 0) {
+                    orderExpressions?.unshift(orderExpressions?.splice(orderPosition, 1)?.[0]);
+                } else {
+                    orderExpressions?.unshift([expression, 'ASC']);
+                }
+            }
+        }
         const conditions = [whereCondition].filter(notEmpty);
         const cursorsEnabled = takeCursors && orderExpressions?.length;
         const zodType: z.ZodType<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect>>
@@ -451,6 +493,7 @@ export function makeQueryLoader<
             .filter((column) => noneSelected || select?.includes(column as any))
         ).values()).map(a => sql.identifier([a])) as any[];
         const lateralExpressions = [] as SqlFragment[];
+        const extraSelects = [] as SqlFragment[];
         if (takeCursors && orderExpressions?.length) {
             if (options.options?.useSqlite) {
                 finalKeys.push(sql.fragment`json_object(${
@@ -464,11 +507,7 @@ export function makeQueryLoader<
             } else {
                 if (!query.sql.includes("lateralcolumns.cursorjson")) {
                     // Hacky way to get access to internal FROM tables for sorting expressions...
-                    actualQuery = {
-                        ...query,
-                        // TODO: Replace hacky way when query.from is required.
-                        sql: query.sql.replace(/^\n*(\W\n?)*SELECT/i, `SELECT lateralcolumns.cursorjson ${cursorColumns}, `),
-                    }
+                    extraSelects.push(sql.fragment`lateralcolumns.cursorjson ${sql.identifier([cursorColumns])}`)
                 }
                 lateralExpressions.push(sql.fragment`jsonb_build_object(${
                     orderExpressions.length
@@ -524,23 +563,13 @@ export function makeQueryLoader<
             );
         }
         const groupExpression = (queryComponents.groupBy) ? [
-            ...(typeof queryComponents.groupBy === 'function' ? [queryComponents.groupBy({
-                where,
-                take,
-                skip,
-                orderBy,
-                ctx,
-                cursor,
-                takeCursors,
-                searchAfter,
-                selectGroups,
-                select,
-            })] : []),
+            ...(typeof queryComponents.groupBy === 'function' ? [queryComponents.groupBy(allArgs)] : []),
             ...((queryComponents.groupBy as SqlFragment)?.sql ? [queryComponents.groupBy as SqlFragment] : []),
             lateralExpressions[0] ? sql.fragment`lateralcolumns.cursorjson` : null
         ].filter(notEmpty) : [];
+        const extraSelectFields = extraSelects.length ? sql.fragment`, ${sql.join(extraSelects, sql.fragment`, `)}` : sql.fragment``;
 
-        const baseQuery = sql.type(zodType)`${actualQuery} ${fromFragment ?? sql.fragment``} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
+        const baseQuery = sql.type(zodType)`${actualQuery} ${extraSelectFields} ${fromFragment ?? sql.fragment``} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
         ${conditions.length ? sql.fragment`WHERE (${sql.join(conditions, sql.fragment`) AND (`)})` : sql.fragment``}
         ${groupExpression?.length ? sql.fragment`GROUP BY ${sql.join(groupExpression, sql.fragment`, `)}` : sql.fragment``}
         ${orderExpressions ? sql.fragment`ORDER BY ${sql.join(orderExpressions.map(parsed => interpretOrderBy(orderByType.parse(parsed), reverse)), sql.fragment`, `)}` : sql.fragment``}
