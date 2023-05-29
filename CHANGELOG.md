@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.12.0
+
+### Minor Changes
+
+-   8518113: Added DISTINCT ON support
+
 ## 0.11.0
 
 ### Minor Changes
