@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.13.0
+
+### Minor Changes
+
+-   6984f94: Added plugins
+
 ## 0.12.0
 
 ### Minor Changes
