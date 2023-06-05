@@ -18,15 +18,15 @@ import { sql } from 'slonik';
 import { z } from 'zod';
 import { makeQueryLoader } from 'slonik-trpc';
 
+const queryType = z.object({
+    id: z.string(),
+    name: z.string(),
+    age: z.number(),
+});
 const loader = makeQueryLoader({
     db: slonikConnection, // any DB connection will do
     query: {
-        select: sql.type(z.object({
-            id: z.string(),
-            name: z.string(),
-            age: z.number(),
-            // Any slonik query will do
-		}))`
+        select: sql.type(queryType)`
 		SELECT id,
 			name,
 			EXTRACT(NOW() - created_at) AS age
@@ -64,6 +64,7 @@ Read on for more advanced usage, including how to use sorting, filtering, cursor
 - [x] [Offset-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/pagination).
 - [x] [Cursor-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/cursor-pagination).
   - [x] Reverse page support
+- [x] [Plugins](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/plugins)
 
 ### Requirements
 
@@ -355,6 +356,8 @@ const usersAfterBob = await db.any(await sortableLoader.getQuery({
     take: 5,
 }));
 ```
+
+You'd normally retrieve this cursor from the previous result e.g. `result.pageInfo.endCursor`, if you specify `takeCursors: true`.
 
 #### Manual cursor-based pagination
 

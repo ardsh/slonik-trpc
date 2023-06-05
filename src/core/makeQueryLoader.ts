@@ -4,6 +4,8 @@ import { notEmpty } from "../helpers/zod";
 import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, recursiveFilterConditions, ZodPartial } from "./queryFilter";
 import { debug } from '../helpers/debug';
 import { fromCursor, toCursor } from "../helpers/cursors";
+import type { Plugin } from "./plugins/types";
+import { PromiseOrValue } from "../helpers/types";
 
 const orderDirection = z.enum(["ASC", "DESC"]);
 type OrderDirection = z.infer<typeof orderDirection>;
@@ -52,7 +54,7 @@ function interpretOrderBy(field: OrderField, reverse?: boolean) {
 
 type OptionalArray<T> = readonly T[] | T;
 
-type LoadParameters<
+export type LoadParameters<
     TFilter,
     TContext,
     TObject extends Record<string, any>,
@@ -230,6 +232,7 @@ export function makeQueryLoader<
             boolean
         >) => SqlFragment),
     },
+    plugins?: readonly Plugin<any>[],
     /** Optional parameter that can be used to override the slonik query parser.
      * Doesn't need to be used if you use sql.type when declaring the query parameter.
      * */
@@ -265,7 +268,7 @@ export function makeQueryLoader<
      * 
      * This will let users query only their own posts, if the posts table is in the query.
      * */
-    constraints?: (ctx: z.infer<TContextZod>) => Promise<SqlFragment | SqlFragment[] | null | undefined> | SqlFragment | SqlFragment[] | null | undefined,
+    constraints?: (ctx: z.infer<TContextZod>) => PromiseOrValue<SqlFragment | SqlFragment[] | null | undefined>,
     /**
      * Specify aliases for sortable columns. Can either be a single column, or a tuple of table name + column.
      * E.g.
@@ -454,7 +457,7 @@ export function makeQueryLoader<
             distinctOn?.length ? [sortFields.parse(distinctOn)] : null;
         const orderExpressions = Array.isArray(orderBy?.[0]) ? orderBy?.map(order => orderByWithoutTransform.parse(order)) :
             orderBy?.length ? [orderByWithoutTransform.parse(orderBy)] : distinctFields?.length ? [] : null;
-        if (distinctFields?.length) {
+        if (distinctFields?.length && !options?.options?.useSqlite) {
             const distinctExpressions = distinctFields.map(field => interpretFieldFragment(sortFieldWithTransform.parse(field)));
             const distinctQuery = sql.fragment`SELECT DISTINCT ON (${sql.join(distinctExpressions, sql.fragment`, `)})`;
             // Hacky way to add DISTINCT ON (must be done towards the end...)
@@ -589,6 +592,22 @@ export function makeQueryLoader<
                 finalKeys,
                 sql.fragment`, `
             )} FROM root_query`;
+        for (const plugin of (options.plugins || [])) {
+            if (plugin.onGetQuery) {
+                try {
+                    plugin.onGetQuery({
+                        args: {
+                            ...allArgs,
+                            take,
+                            select,
+                        },
+                        query: finalQuery,
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        }
         return finalQuery;
     };
     const getSelectableFields = () => {
@@ -712,10 +731,40 @@ export function makeQueryLoader<
                 take: typeof args.take === 'number' ? args.take : (options?.defaults?.take),
                 takeCursors: false,
             });
-            debug(finalQuery.sql);
-            return db.any(finalQuery).then(async rows => {
+            let result = null as PromiseOrValue<TObject[]> | null;
+            const onLoadOptions = {
+                args,
+                query: finalQuery,
+                setResultAndStopExecution(newResult: PromiseOrValue<TObject[]>) {
+                    result = newResult;
+                },
+            }
+            const afterCalls: ((options: { result: readonly any[]; setResult: (newResult: PromiseOrValue<TObject[]>) => void }) => void)[] = [];
+
+            for (const plugin of options.plugins || []) {
+                if (plugin.onLoad) {
+                    const done = plugin.onLoad(onLoadOptions);
+                    if (done?.onLoadDone) {
+                        afterCalls.push(done.onLoadDone);
+                    }
+                    if (result) break;
+                }
+            }
+            const load = () => db.any(finalQuery).then(async rows => {
                 return mapTransformRows(reverse ? (rows as any).reverse() as never : rows, args.select, args.ctx);
+            }).then(async rows => {
+                // Call the onLoadDone method of each plugin
+                for (const onLoadDone of afterCalls) {
+                    onLoadDone({
+                        result: rows,
+                        setResult: (newResult) => { result = newResult; },
+                    });
+                }
+                if (result) return result as never;
+                return rows;
             });
+            if (result) return result as never;
+            return load();
         },
         /**
          * Returns the data in a pagination-convenient form.
@@ -757,7 +806,7 @@ export function makeQueryLoader<
                  * */
                 takeNextPages?: number;
             }, database?: Pick<CommonQueryMethods, "any">
-        ) {
+        ): Promise<LoadPaginationResult<ResultType<TObject, TVirtuals, TGroups[TGroupSelected][number], TSelect>>> {
             if (args.selectGroups?.length) {
                 const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
                 args.select = (args.select || []).concat(...groupFields as any[]);
@@ -794,8 +843,25 @@ export function makeQueryLoader<
                     .any(countQuery)
                     .then((res) => res?.[0]?.count);
             }
-            debug(finalQuery.sql);
-            return db
+            let result = null as PromiseOrValue<LoadPaginationResult<any>> | null;
+            const afterCalls: ((options: { result: LoadPaginationResult<any>; setResult: (newResult: PromiseOrValue<LoadPaginationResult<any>>) => void }) => void)[] = [];
+            for (const plugin of options.plugins || []) {
+                if (plugin.onLoadPagination) {
+                    const done = plugin.onLoadPagination({
+                        args,
+                        query: finalQuery,
+                        countQuery,
+                        setResultAndStopExecution(newResult) {
+                            result = newResult;
+                        },
+                    });
+                    if (done?.onLoadDone) {
+                        afterCalls.push(done.onLoadDone);
+                    }
+                    if (result) break;
+                }
+            }
+            const load = () => db
                 .any(finalQuery)
                 .then(async (nodes) => {
                     const slicedNodes = nodes.slice(0, take || undefined);
@@ -827,13 +893,41 @@ export function makeQueryLoader<
                                 startCursor: cursors.startCursor,
                                 endCursor: cursors.endCursor,
                             }),
-                            count: await countPromise.catch(err => console.error('Count query failed', err)),
+                            count: await countPromise.catch(err => {
+                                console.error('Count query failed', err);
+                                return null;
+                            }),
                         }
                     };
+                }).then((rows) => {
+                    // Call the onLoadDone method of each plugin
+                    for (const onLoadDone of afterCalls) {
+                        onLoadDone({
+                            result: rows,
+                            setResult: (newResult) => { result = newResult; },
+                        });
+                    }
+                    if (result) return result;
+                    return rows;
                 });
+            if (result) return result;
+            return load();
         },
     }
     return self;
+}
+
+export type LoadPaginationResult<T> = {
+    nodes: readonly T[];
+    cursors?: (string | null)[];
+    pageInfo: {
+        hasPreviousPage: boolean;
+        hasNextPage: boolean;
+        minimumCount: number;
+        startCursor?: string;
+        endCursor?: string;
+        count: number | null;
+    }
 }
 
 export type InferPayload<

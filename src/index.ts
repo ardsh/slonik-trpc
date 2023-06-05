@@ -8,3 +8,5 @@ type ReturnFirstArgument<T> = T extends (...args: readonly [(infer A)]) => any ?
 export const createOptions: ReturnFirstArgument<typeof makeQueryLoader> = ((options) => {
     return options;
 });
+
+export type { Plugin } from './core/plugins/types';

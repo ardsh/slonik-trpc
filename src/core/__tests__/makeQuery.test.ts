@@ -8,6 +8,7 @@ import { createGroupSelector } from '../selectGroups';
 import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } from '../../helpers/sqlUtils';
 import { expectTypeOf } from 'expect-type';
 import { createOptions } from '../../index';
+import { useSlowQueryPlugin } from '../plugins';
 
 const decodeCursors = ({ startCursor='', endCursor='' }) => {
     return {
@@ -49,6 +50,24 @@ describe("withQueryLoader", () => {
         expect(result[0].id).toEqual(expect.any(Number));
         expect(result).not.toHaveLength(0);
         expectTypeOf(result[0]).toEqualTypeOf<{ id: number, uid: string, value: string }>();
+    });
+
+    it("Throws errors for invalid queries", async () => {
+        expect(() => makeQueryLoader({
+            db,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`test_table_bar`,
+            },
+        })).toThrow("query.from must begin with FROM");
+
+        expect(() => makeQueryLoader({
+            db,
+            query: {
+                select: sql.type(zodType)`id, uid, value`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
+        })).toThrow("Your query must begin with SELECT");
     });
 
     it("Works with sql query type", async () => {
@@ -484,6 +503,11 @@ describe("withQueryLoader", () => {
             select: sql.type(zodType)`SELECT *`,
             from: sql.fragment`FROM test_table_bar`,
         },
+        plugins: [
+            useSlowQueryPlugin({
+                slowQueryThreshold: 2,
+            }),
+        ],
         constraints() {
             return sql.fragment`TRUE`;
         },
@@ -1046,6 +1070,11 @@ describe("withQueryLoader", () => {
         expect(parsed).toEqual({
             orderBy: [["value", "DESC"], ["id", "ASC"]],
         });
+        expect(parser.parse({
+            orderBy: [["value", "DESC"], ["id", "ASC"]],
+        })).toEqual({
+            orderBy: [["value", "DESC"], ["id", "ASC"], ["id", "ASC"]],
+        });
         expectTypeOf(parsed.orderBy?.[0]).toMatchTypeOf<["id" | "value", string] | "value" | "id" | null | undefined>();
     });
 
@@ -1202,6 +1231,7 @@ describe("withQueryLoader", () => {
     it("Passes the context and filters to filter postprocessing", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,
+            plugins: [useSlowQueryPlugin()],
             filters: {
                 ...genericOptions.filters,
                 options: {
@@ -1427,6 +1457,9 @@ describe("withQueryLoader", () => {
                 select: sql.type(zodType)`SELECT id, uid, value`,
                 from: sql.fragment`FROM test_table_bar`,
             },
+            defaults: {
+                take: 1,
+            },
             sortableColumns: {
                 id: "id",
                 upperValue: sql.fragment`UPPER("value")`,
@@ -1438,7 +1471,6 @@ describe("withQueryLoader", () => {
                 id: 2,
                 upperValue: "AAA",
             },
-            take: 1,
             orderBy: [["upperValue", "DESC"], ["id", "DESC"]] as const
         };
         const query = await loader.getQuery(args);
@@ -1531,6 +1563,11 @@ describe("withQueryLoader", () => {
         expect(loader.loadPagination({
             take: -2,
             select: ['id', 'value'],
+        })).rejects.toThrow(/orderBy must be specified/);
+        // eslint-disable-next-line
+        expect(loader.getQuery({
+            take: -2,
+            select: ['id'],
         })).rejects.toThrow(/orderBy must be specified/);
     });
 
@@ -1764,13 +1801,13 @@ describe("withQueryLoader", () => {
                 runtimeCheck: false,
             }
         });
-        const data = await loader.load({
+        const data = await loader.loadPagination({
             take: 1,
             // @ts-expect-error nonSelectable group selected
             selectGroups: ["nonSelectable"]
         });
         // expectTypeOf(data[0]).toMatchTypeOf<{ id: number, uid: string, dummyField: any, value: string }>();
-        expect(data[0]).toEqual({
+        expect(data.nodes[0]).toEqual({
             id: expect.any(Number),
             uid: expect.any(String),
             value: expect.any(String),
@@ -2163,5 +2200,134 @@ describe("withQueryLoader", () => {
         });
         expect(query.sql).toContain(`SELECT DISTINCT ON ("test_table_bar"."value")`);
         expect(query.sql).toContain(`ORDER BY "test_table_bar"."value" DESC, test_table_bar."id" DESC`);
+    });
+
+    it("Allows plugins to overwrite results of load", async() => {
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            plugins: [{
+                onLoad(options) {
+                    if (options.args.take === 1) {
+                        options.setResultAndStopExecution([{
+                            ...options.args,
+                        }])
+                    } else if (options.args.take === 2) {
+                        options.setResultAndStopExecution(Promise.resolve([{
+                            ...options.args,
+                        }]));
+                    }
+                    return {
+                        onLoadDone(options) {
+                            options.setResult(new Promise((resolve) => {
+                                setTimeout(() => resolve([{
+                                    delayed: true,
+                                }]), 5);
+                            }));
+                        },
+                    }
+                },
+            }],
+        });
+
+        const takeArgs = await loader.load({
+            take: 1,
+        });
+        expect(takeArgs).toEqual([{
+            take: 1,
+        }]);
+
+        expect(await loader.load({
+            take: 2,
+        })).toEqual([{
+            take: 2,
+        }])
+
+        expect(await loader.load({
+            take: 3,
+        })).toEqual([{
+            delayed: true,
+        }]);
+    });
+
+    it("Allows plugins to overwrite results of loadPagination", async() => {
+        const res = {
+            nodes: [{
+                a: 3,
+            }],
+            pageInfo: {
+                count: 1,
+                hasNextPage: false,
+                hasPreviousPage: false,
+                minimumCount: 1,
+            }
+        };
+        const getQuerySpy = jest.fn();
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            plugins: [{
+                onGetQuery(options) {
+                    getQuerySpy(options);
+                },
+                onLoadPagination(options) {
+                    if (options.args.take === 1) {
+                        options.setResultAndStopExecution(Promise.resolve(res));
+                    }
+                    return {
+                        onLoadDone(options) {
+                            options.setResult(new Promise((resolve) => {
+                                setTimeout(() => resolve({
+                                    nodes: [],
+                                    pageInfo: {
+                                        delayed: true,
+                                    } as any
+                                }), 5);
+                            }));
+                        },
+                    }
+                },
+            }],
+        });
+
+        const loadRes = await loader.loadPagination({
+            take: 1,
+        });
+        expect(loadRes).toEqual(res);
+
+        expect(await loader.loadPagination({
+            take: 2,
+        })).toEqual({
+            nodes: [],
+            pageInfo: {
+                delayed: true,
+            },
+        });
+        // Twice for each pagination
+        expect(getQuerySpy).toHaveBeenCalledTimes(4);
+    });
+
+    it("Calls slow query plugin for slow queries", async() => {
+        const spy = jest.fn();
+        const loader = makeQueryLoader({
+            ...genericOptions,
+            sortableColumns: {
+                value: ["test_table_bar", "value"],
+                id: sql.fragment`test_table_bar."id"`,
+            },
+            plugins: [
+                useSlowQueryPlugin({
+                    slowQueryThreshold: 0,
+                    callback: (args) => {
+                        spy(args);
+                    }
+                })
+            ],
+        });
+
+        await loader.load({
+            take: 20,
+            orderBy: [["id", "DESC"], ["value", "DESC"]],
+        });
+
+        expect(spy).toHaveBeenCalled();
     });
 });

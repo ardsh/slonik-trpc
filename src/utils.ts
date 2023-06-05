@@ -21,3 +21,5 @@ export {
 export {
     createResultParserInterceptor
 } from './helpers/resultParserInterceptor';
+
+export * from './core/plugins';
