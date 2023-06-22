@@ -2179,6 +2179,22 @@ describe("withQueryLoader", () => {
         });
         expect(query.sql).toContain(`SELECT DISTINCT ON ("test_table_bar"."value")`);
         expect(query.sql).toContain(`ORDER BY "test_table_bar"."value" ASC`);
+        const data = await loader.load({
+            distinctOn: ["value"],
+            orderBy: [["value", "DESC"]],
+            select: ["value"],
+        });
+        expect(data).toEqual([{
+            value: "eee",
+        }, {
+            value: "ddd",
+        }, {
+            value: "ccc",
+        }, {
+            value: "bbb",
+        }, {
+            value: "aaa",
+        }]);
     });
 
     it("distinctOn adds orderBy fragments in front", async () => {

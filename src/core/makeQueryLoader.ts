@@ -54,6 +54,12 @@ function interpretOrderBy(field: OrderField, reverse?: boolean) {
 
 type OptionalArray<T> = readonly T[] | T;
 
+// Need to pick used keys explicitly, omitting doesn't work
+type GetNonEmptyKeys<TFilter extends Record<string, z.ZodTypeAny>=never, TSortable extends string=never> =
+    ([TFilter] extends [never] ? "take" : "where") |
+    ([TSortable] extends [never] ? "take" : ("orderBy" | "searchAfter" | "takeCursors" | "cursor" | "distinctOn")) |
+    "take" | "skip" | "select" | "ctx" | "selectGroups";
+
 export type LoadParameters<
     TFilter,
     TContext,
@@ -709,14 +715,14 @@ export function makeQueryLoader<
             TSelect extends keyof (TVirtuals & z.infer<TObject>) = never,
             TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
         >(
-            args: Omit<LoadParameters<
+            args: Pick<LoadParameters<
                 TFilter,
                 z.infer<TContextZod>,
                 TVirtuals & z.infer<TObject>,
                 (TSelect) & TSelectable,
                 TSortable,
                 TGroupSelected
-            >, "takeCursors">, database?: Pick<CommonQueryMethods, "any">
+            >, Exclude<GetNonEmptyKeys<TFilterTypes, TSortable>, "takeCursors">>, database?: Pick<CommonQueryMethods, "any">
         ) {
             // TODO: Remove this
             if (args.selectGroups?.length) {
@@ -777,7 +783,7 @@ export function makeQueryLoader<
             TGroupSelected extends Exclude<keyof TGroups, number | symbol> = never,
             TTakeCursors extends boolean = false,
         >(
-            args: LoadParameters<
+            args: Pick<LoadParameters<
                 TFilter,
                 z.infer<TContextZod>,
                 TVirtuals & z.infer<TObject>,
@@ -785,7 +791,7 @@ export function makeQueryLoader<
                 TSortable,
                 TGroupSelected,
                 TTakeCursors
-            > & {
+            >, GetNonEmptyKeys<TFilterTypes, TSortable>> & {
                 /**
                  * If true, a count query is called to fetch all the rows as if no `take` limit had been specified.
                  * And the `count` field will return a number.
@@ -814,11 +820,12 @@ export function makeQueryLoader<
             if (!args.take && typeof args.take !== 'number' && options?.defaults?.take) {
                 args.take = options.defaults.take;
             }
+            const allArgs = args as any;
             const db = database || options?.db;
             if (!db?.any) throw new Error("Database not provided");
             const reverse = !!args.take && args.take < 0 ? -1 : 1;
             const take = (typeof args.take === 'number' && args.take < 0) ? -args.take : args.take;
-            if (reverse === -1 && !args.orderBy?.length) {
+            if (reverse === -1 && !allArgs.orderBy?.length) {
                 throw new Error("orderBy must be specified when take parameter is negative!");
             }
             const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (take || 25) + 1;
@@ -866,7 +873,7 @@ export function makeQueryLoader<
                 .then(async (nodes) => {
                     const slicedNodes = nodes.slice(0, take || undefined);
                     const rows = reverse === -1 ? slicedNodes.reverse() as never : slicedNodes;
-                    const cursors = args.takeCursors && {
+                    const cursors = allArgs.takeCursors && {
                         startCursor: toCursor((rows[0] as any)?.[cursorColumns]),
                         endCursor: toCursor((rows[rows.length - 1] as any)?.[cursorColumns]),
                         cursors: rows.map((row: any) => {
@@ -879,7 +886,7 @@ export function makeQueryLoader<
                         }),
                     };
                     const hasMore = nodes.length > slicedNodes.length;
-                    const hasPrevious = !!args.skip || (!!args.cursor || !!args.searchAfter);
+                    const hasPrevious = !!args.skip || (!!allArgs.cursor || !!allArgs.searchAfter);
                     return {
                         nodes: await mapTransformRows(rows, args.select, args.ctx),
                         ...(cursors && {
@@ -936,7 +943,7 @@ export type InferPayload<
     },
     TArgs extends TLoader extends {
         loadPagination: (...args: readonly [infer A]) => any
-    } ? Omit<A, "ctx" | "orderBy" | "searchAfter" | "skip" | "take" | "takeCount" | "takeNextPages" | "where" | "cursor"> : never = never,
+    } ? Omit<A, "ctx" | "orderBy" | "searchAfter" | "skip" | "take" | "takeCount" | "takeNextPages" | "where" | "cursor" | "distinctOn" | "takeCursors"> : never = never,
     TResult extends Record<string, any> = TLoader extends {
         load: (...args: any) => PromiseLike<ArrayLike<infer A>>
     } ? A extends Record<string, any> ? Exclude<A, "cursor"> : never : any,
