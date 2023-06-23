@@ -221,6 +221,7 @@ export function makeQueryLoader<
     } = Record<string, never>,
     TSelectable extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
+    TContext=z.infer<TContextZod>,
 >(options: {
     query: {
         /** The select query (without including FROM) */
@@ -230,7 +231,7 @@ export function makeQueryLoader<
         /** The GROUP BY part of the query. Don't include `GROUP BY` */
         groupBy?: SqlFragment | ((args: LoadParameters<
             z.infer<ZodPartial<TFilterTypes>>,
-            z.infer<TContextZod>,
+            TContext,
             TVirtuals & z.infer<TObject>,
             (keyof (TVirtuals & z.infer<TObject>)) & TSelectable,
             TSortable,
@@ -248,6 +249,11 @@ export function makeQueryLoader<
      * Use this if you want to make sure the context always has a specific shape, e.g. when using it for authorization.
      * */
     contextParser?: TContextZod,
+    /**
+     * Optional function that can be used to create the context.
+     * Use this if you want to add default values to every context.
+     * */
+    contextFactory?: (userContext?: z.infer<TContextZod>) => TContext,
     db?: Pick<CommonQueryMethods, "any">
     /**
      * You can use the {@link createFilters} helper for this argument.
@@ -255,8 +261,8 @@ export function makeQueryLoader<
      * */
     filters?: {
         filters: TFilterTypes,
-        interpreters: Interpretors<TFilterTypes, z.infer<TContextZod>>,
-        options?: FilterOptions<TFilterTypes, z.infer<TContextZod>>
+        interpreters: Interpretors<TFilterTypes, TContext>,
+        options?: FilterOptions<TFilterTypes, TContext>
     }
     /**
      * You can add any hardcoded conditions here, to be used for authorization.  
@@ -274,7 +280,7 @@ export function makeQueryLoader<
      * 
      * This will let users query only their own posts, if the posts table is in the query.
      * */
-    constraints?: (ctx: z.infer<TContextZod>) => PromiseOrValue<SqlFragment | SqlFragment[] | null | undefined>,
+    constraints?: (ctx: TContext) => PromiseOrValue<SqlFragment | SqlFragment[] | null | undefined>,
     /**
      * Specify aliases for sortable columns. Can either be a single column, or a tuple of table name + column.
      * E.g.
@@ -314,7 +320,7 @@ export function makeQueryLoader<
     virtualFields?: {
         [x in keyof TVirtuals]?: {
             /** Return the virtual field */
-            resolve: (row: z.infer<TObject>, ctx?: z.infer<TContextZod>) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
+            resolve: (row: z.infer<TObject>, ctx?: TContext) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
     };
@@ -361,7 +367,7 @@ export function makeQueryLoader<
     const isAnyType = type._any === true;
     if (!isAnyType && (!type || !type.keyof || !type.partial)) throw new Error('Invalid query type provided: ' + (type));
     type TFilter = z.infer<ZodPartial<TFilterTypes>>;
-    const interpretFilters = options?.filters?.interpreters ? makeFilter<TFilterTypes, z.infer<TContextZod>>(options.filters.interpreters, options.filters?.options) : null;
+    const interpretFilters = options?.filters?.interpreters ? makeFilter<TFilterTypes, TContext>(options.filters.interpreters, options.filters?.options) : null;
     const sortableAliases = Object.keys(options?.sortableColumns || {}) as [TSortable, ...TSortable[]];
     const sortFields = sortableAliases.length
             ? z.enum(sortableAliases)
@@ -439,7 +445,8 @@ export function makeQueryLoader<
             searchAfter,
             selectGroups,
         } = allArgs;
-        const context = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
+        const initialContext = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
+        const context = options.contextFactory?.(initialContext) || initialContext;
         const filtersCondition = await interpretFilters?.(where || ({} as any), context);
         const authConditions = await options?.constraints?.(context);
         const auth = Array.isArray(authConditions) ? authConditions : [authConditions].filter(notEmpty);
@@ -469,7 +476,7 @@ export function makeQueryLoader<
             // Hacky way to add DISTINCT ON (must be done towards the end...)
             actualQuery = {
                 ...actualQuery,
-                sql: query.sql.replace(/^\n*(\W\n?)*SELECT( DISTINCT)?/i, distinctQuery.sql),
+                sql: query.sql.replace(/^\n*(\W\n?)*SELECT(\s*DISTINCT)?/i, distinctQuery.sql),
             };
             for (const expression of distinctFields.reverse()) {
                 // Reverse to make sure unshift is done in the correct order
@@ -834,22 +841,17 @@ export function makeQueryLoader<
                 take: // Query an extra row to see if the next page exists
                       (Math.min(Math.max(0, take || 100), (options.options?.maxLimit || 1000)) + extraItems) * reverse,
             });
-            const countQuery = sql.type(countQueryType)`SELECT COUNT(*) FROM (${await getQuery({
+            const countQuery = args.takeCount ? sql.type(countQueryType)`SELECT COUNT(*) FROM (${await getQuery({
                 ...args,
                 skip: undefined,
                 searchAfter: undefined,
                 cursor: undefined,
                 takeCursors: false,
                 take: undefined,
-            })}) allrows`;
+            })}) allrows` : null as never;
             // Count is null by default
             let countPromise = Promise.resolve(null as number | null);
-            if (args.takeCount) {
-                debug(countQuery.sql);
-                countPromise = db
-                    .any(countQuery)
-                    .then((res) => res?.[0]?.count);
-            }
+            let countSet = false;
             let result = null as PromiseOrValue<LoadPaginationResult<any>> | null;
             const afterCalls: ((options: { result: LoadPaginationResult<any>; setResult: (newResult: PromiseOrValue<LoadPaginationResult<any>>) => void }) => void)[] = [];
             for (const plugin of options.plugins || []) {
@@ -858,6 +860,10 @@ export function makeQueryLoader<
                         args,
                         query: finalQuery,
                         countQuery,
+                        setCount(newCount) {
+                            countPromise = Promise.resolve(newCount);
+                            countSet = true;
+                        },
                         setResultAndStopExecution(newResult) {
                             result = newResult;
                         },
@@ -887,8 +893,9 @@ export function makeQueryLoader<
                     };
                     const hasMore = nodes.length > slicedNodes.length;
                     const hasPrevious = !!args.skip || (!!allArgs.cursor || !!allArgs.searchAfter);
+                    const allRows = await mapTransformRows(rows, args.select, args.ctx)
                     return {
-                        nodes: await mapTransformRows(rows, args.select, args.ctx),
+                        nodes: allRows,
                         ...(cursors && {
                             cursors: cursors.cursors
                         }),
@@ -918,6 +925,11 @@ export function makeQueryLoader<
                     return rows;
                 });
             if (result) return result;
+            if (args.takeCount && !countSet) {
+                countPromise = db
+                    .any(countQuery)
+                    .then((res) => res?.[0]?.count);
+            }
             return load();
         },
     }

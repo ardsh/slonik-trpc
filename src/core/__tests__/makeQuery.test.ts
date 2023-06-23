@@ -2278,8 +2278,12 @@ describe("withQueryLoader", () => {
             }
         };
         const getQuerySpy = jest.fn();
+        const dbSpy = jest.fn(() => Promise.resolve([] as any));
         const loader = makeQueryLoader({
             ...genericOptions,
+            db: {
+                any: dbSpy,
+            },
             plugins: [{
                 onGetQuery(options) {
                     getQuerySpy(options);
@@ -2287,6 +2291,10 @@ describe("withQueryLoader", () => {
                 onLoadPagination(options) {
                     if (options.args.take === 1) {
                         options.setResultAndStopExecution(Promise.resolve(res));
+                    }
+                    if (options.args.take === 3) {
+                        options.setCount(65);
+                        return;
                     }
                     return {
                         onLoadDone(options) {
@@ -2306,9 +2314,10 @@ describe("withQueryLoader", () => {
 
         const loadRes = await loader.loadPagination({
             take: 1,
+            takeCount: true,
         });
         expect(loadRes).toEqual(res);
-
+        expect(dbSpy).not.toHaveBeenCalled();
         expect(await loader.loadPagination({
             take: 2,
         })).toEqual({
@@ -2318,7 +2327,18 @@ describe("withQueryLoader", () => {
             },
         });
         // Twice for each pagination
-        expect(getQuerySpy).toHaveBeenCalledTimes(4);
+        expect(getQuerySpy).toHaveBeenCalledTimes(3);
+        expect(dbSpy).toHaveBeenCalledTimes(1);
+        expect(await loader.loadPagination({
+            take: 3,
+        })).toEqual({
+            nodes: [],
+            pageInfo: expect.objectContaining({
+                count: 65,
+            }),
+        });
+        // Only one query added (no count query)
+        expect(dbSpy).toHaveBeenCalledTimes(2);
     });
 
     it("Calls slow query plugin for slow queries", async() => {

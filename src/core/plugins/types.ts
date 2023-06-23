@@ -17,6 +17,10 @@ type OnLoadPaginationOptions<TObject extends Record<string, any>=any> = {
     args: LoadParameters<any, any, TObject, any, string, string, boolean>,
     query: QuerySqlToken;
     countQuery: QuerySqlToken;
+    /** Use this function for overwriting the total count query.
+     * You can use an optimized method to calculate the count (by default it's a simple count(*) query)
+     * */
+    setCount: (newCount: PromiseOrValue<number>) => void;
     setResultAndStopExecution: (newResult: PromiseOrValue<LoadPaginationResult<TObject>>) => void;
 }
 

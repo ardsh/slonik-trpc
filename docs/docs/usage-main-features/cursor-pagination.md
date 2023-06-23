@@ -53,7 +53,7 @@ Note that for cursor-based pagination to work, the items need to be sorted by a 
 
 ### Paging backwards
 
-If you specify a negative number for the `take` option, you'll be page to get the previous page:
+If you specify a negative number for the `take` option, you'll get the previous page:
 
 ```ts
 const previousPage = await postsLoader.loadPagination({
