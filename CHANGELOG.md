@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.13.2
+
+### Patch Changes
+
+-   bff0e7f: Added contextFactory and count overwriting in plugins
+
 ## 0.13.0
 
 ### Minor Changes
