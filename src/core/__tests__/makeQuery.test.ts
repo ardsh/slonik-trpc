@@ -1200,13 +1200,18 @@ describe("withQueryLoader", () => {
             ...genericOptions,
             contextParser: z.object({
                 userId: z.string(),
+                newField: z.string(),
+            }),
+            contextFactory: (ctx) => ({
+                ...ctx,
+                newField: 'bob',
             }),
             filters: {
                 ...genericOptions.filters,
                 options: {
                     postprocess(conditions, filters, context) {
-                        expectTypeOf(context).toEqualTypeOf<{ userId: string }>();
-                        expect(context).toEqual({ userId: "bla" });
+                        expectTypeOf(context).toEqualTypeOf<{ userId?: string, newField: string }>();
+                        expect(context).toEqual({ userId: "bla", newField: 'bob' });
                         return conditions;
                     },
                 }

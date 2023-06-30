@@ -48,7 +48,8 @@
         "zod": "^3"
     },
     "dependencies": {
-        "debug": "^4.3.4"
+        "debug": "^4.3.4",
+        "nativebird": "^1.2.11"
     },
     "devDependencies": {
         "@changesets/cli": "^2.25.2",

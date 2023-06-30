@@ -30,6 +30,9 @@ const query = {
 
 const loader = makeQueryLoader({
     query,
+    options: {
+        maxLimit: 10000,
+    },
     db,
 });
 let baseline = 200;
@@ -58,6 +61,15 @@ it("Virtual fields without promises", async () => {
     const loader = makeQueryLoader({
         query,
         db,
+        contextFactory(userContext) {
+            return {
+                db,
+                userContext,
+            }
+        },
+        options: {
+            maxLimit: 10000,
+        },
         virtualFields: {
             blabla: {
                 dependencies: ["date"],
@@ -79,6 +91,9 @@ it("Virtual fields with promises", async () => {
     const loader = makeQueryLoader({
         query,
         db,
+        options: {
+            maxLimit: 10000,
+        },
         virtualFields: {
             blabla: {
                 dependencies: ["date"],

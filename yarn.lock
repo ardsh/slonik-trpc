@@ -3238,6 +3238,11 @@ multi-fork@0.0.2:
   resolved "https://registry.yarnpkg.com/multi-fork/-/multi-fork-0.0.2.tgz#8058aec4614124c7edaa15819b88ee889d3eb4e0"
   integrity sha512-SHWGuze0cZNiH+JGJQFlB1k7kZLGFCvW1Xo5Fcpe86KICkC3aVTJWpjUcmyYcLCB0I6gdzKLCia/bTIw2ggl8A==
 
+nativebird@^1.2.11:
+  version "1.2.11"
+  resolved "https://registry.yarnpkg.com/nativebird/-/nativebird-1.2.11.tgz#9f4a0d78a28b4eb1a68ff0003f05bd5c6ee23d2d"
+  integrity sha512-mZqbma6L/8n1snzCg4WYpg2NLfAavSC09oFzq4b6SRu0KBUFCVHs3ApwHVNSnoEOnMMAUxXhtdhe+uzYs8vH3w==
+
 natural-compare-lite@^1.4.0:
   version "1.4.0"
   resolved "https://registry.yarnpkg.com/natural-compare-lite/-/natural-compare-lite-1.4.0.tgz#17b09581988979fddafe0201e931ba933c96cbb4"

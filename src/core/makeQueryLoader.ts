@@ -340,6 +340,10 @@ export function makeQueryLoader<
          * @default false
          * */
         runtimeCheck?: boolean
+        /** Used when calculating virtual fields that return promises.
+         * 50 by default, lower this if you don't want your rows virtual fields to be processed all at once
+         * */
+        runConcurrency?: number
     },
     defaults?: {
         orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
@@ -391,14 +395,15 @@ export function makeQueryLoader<
             const keys = Object.keys(options.virtualFields);
             const selected = getSelectedKeys(keys, select);
             if (selected.length) {
+                const { default: Nativebird } = await import('nativebird');
                 await Promise.all(selected.map(async key => {
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                     const firstResolve = options.virtualFields![key]!.resolve(rows[0], ctx);
                     if (typeof (firstResolve as PromiseLike<any>)?.then === 'function') {
-                        await Promise.all(rows.slice(1).map(async (row: any) => {
+                        await Nativebird.map(rows.slice(1), async (row: any) => {
                             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                             row[key] = await options.virtualFields![key]!.resolve(row, ctx);
-                        }));
+                        }, { concurrency: options?.options?.runConcurrency || 50 });
                         (rows as any)[0][key] = await firstResolve;
                     } else {
                         (rows as any)[0][key] = firstResolve;
@@ -445,8 +450,7 @@ export function makeQueryLoader<
             searchAfter,
             selectGroups,
         } = allArgs;
-        const initialContext = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
-        const context = options.contextFactory?.(initialContext) || initialContext;
+        const context = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
         const filtersCondition = await interpretFilters?.(where || ({} as any), context);
         const authConditions = await options?.constraints?.(context);
         const auth = Array.isArray(authConditions) ? authConditions : [authConditions].filter(notEmpty);
@@ -736,6 +740,9 @@ export function makeQueryLoader<
                 const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
                 args.select = (args.select || []).concat(...groupFields as any[]);
             }
+            if (typeof options.contextFactory === 'function') {
+                args.ctx = options.contextFactory(args.ctx);
+            }
             const db = database || options?.db;
             const reverse = !!args.take && args.take < 0;
             if (!db?.any) throw new Error("Database not provided");
@@ -823,6 +830,9 @@ export function makeQueryLoader<
             if (args.selectGroups?.length) {
                 const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
                 args.select = (args.select || []).concat(...groupFields as any[]);
+            }
+            if (typeof options.contextFactory === 'function') {
+                args.ctx = options.contextFactory(args.ctx);
             }
             if (!args.take && typeof args.take !== 'number' && options?.defaults?.take) {
                 args.take = options.defaults.take;
