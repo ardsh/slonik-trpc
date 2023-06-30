@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.13.3
+
+### Patch Changes
+
+-   0074ae3: Added runConcurrency option
+
 ## 0.13.2
 
 ### Patch Changes
