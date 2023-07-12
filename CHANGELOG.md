@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.13.4
+
+### Patch Changes
+
+-   6649ad7: Added benchmarking of fields
+
 ## 0.13.3
 
 ### Patch Changes
