@@ -12,6 +12,8 @@ export {
     arrayifyType,
 } from './helpers/sqlUtils';
 
+export { makeQueryAnalyzer } from './helpers/queryAnalyzer';
+
 export {
     mergeFilters,
     makeFilter,
