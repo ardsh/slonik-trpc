@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.13.5
+
+### Patch Changes
+
+-   cb48c1a: Fixed benchmark types
+
 ## 0.13.4
 
 ### Patch Changes
