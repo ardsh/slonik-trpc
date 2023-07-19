@@ -36,6 +36,9 @@ it("Benchmarks a query loader's selectable fields", async () => {
                 id: num => num ? sql.fragment`"id" = ${num}` : null,
             }
         },
+        sortableColumns: {
+            id: 'id',
+        },
         query: {
             select: sql.type(zodType)`SELECT *`,
             from: sql.fragment`FROM test_table_bar`,

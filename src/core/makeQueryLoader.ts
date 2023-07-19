@@ -65,7 +65,7 @@ export type LoadParameters<
     TContext,
     TObject extends Record<string, any>,
     TSelect extends keyof TObject,
-    TSortable extends string = string,
+    TSortable extends string = never,
     TGroupSelectable extends string = never,
     TTakeCursors extends boolean = false,
 > = {
@@ -215,7 +215,7 @@ export function makeQueryLoader<
     TFilterTypes extends Record<string, z.ZodTypeAny>=never,
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
     TVirtuals extends Record<string, any> = z.infer<TObject>,
-    TSortable extends string = string,
+    TSortable extends string = never,
     TGroups extends {
         [x: string]: readonly [Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>, ...(Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>)[]]
     } = Record<string, never>,

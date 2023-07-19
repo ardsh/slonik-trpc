@@ -1,9 +1,10 @@
+
 import * as zod from 'zod';
 import { sql, CommonQueryMethods } from 'slonik';
 import { Fragment, Query } from './types';
 import { makeQueryLoader, InferArgs } from '../core/makeQueryLoader';
 
-export type QueryLoader = ReturnType<typeof makeQueryLoader>;
+export type QueryLoader = Pick<ReturnType<typeof makeQueryLoader>, "getLoadArgs" | "getSelectableFields" | "load">;
 
 export type PlanOutput = {
     'Actual Loops'?: number;
@@ -41,7 +42,7 @@ export type GenerateMockOptions<TLoader extends QueryLoader, TWhere=InferArgs<TL
         [key in keyof typeof zod]?: (field: string, zodType: zod.ZodTypeAny) => (typeof zod[key]) extends zod.ZodType<infer TOutput> ? TOutput : any;
     },
     mappers?: {
-        [key in keyof TWhere]?: () =>TWhere[key];
+        [key in keyof TWhere]?: () => TWhere[key];
     }
 }
 
@@ -97,7 +98,7 @@ function mockZod(field: zod.ZodTypeAny, options?: GenerateMockOptions<any> & { f
     return field._def?.typeName;
 }
 
-export function makeQueryAnalyzer(db: CommonQueryMethods) {
+export function makeQueryAnalyzer(db: Pick<CommonQueryMethods, "any">) {
     const generateMockFilters = async <TLoader extends QueryLoader>(queryLoader: TLoader, options?: GenerateMockOptions<TLoader>) => {
         const args = await queryLoader.getLoadArgs({
             sortableColumns: [] as any,
@@ -134,13 +135,13 @@ export function makeQueryAnalyzer(db: CommonQueryMethods) {
             iterations?: number;
             /** How many fields queries to run concurrently */
             concurrency?: number;
-            args?: Omit<InferArgs<TLoader>, "select">
+            args?: Omit<InferArgs<TLoader>, "select"> & { ctx?: any };
         }) => {
             const { default: Nativebird } = await import('nativebird');
             const selectableFields = queryLoader.getSelectableFields();
             // Analyze every selectable field separately, and then compare which fields take the most time
             const promises = await Nativebird.map(selectableFields, async (field) => {
-                const query = await queryLoader.getQuery({
+                const query = await (queryLoader as any).getQuery({
                     take: 100,
                     ...options?.args,
                     select: [field]
@@ -160,7 +161,7 @@ export function makeQueryAnalyzer(db: CommonQueryMethods) {
          * */
         testAllFilters: async <TLoader extends QueryLoader>(queryLoader: TLoader, options?: GenerateMockOptions<TLoader>) => {
             const where = await generateMockFilters(queryLoader, options);
-            const query = await queryLoader.getQuery({
+            const query = await (queryLoader as any).getQuery({
                 where,
             });
             return self.analyzeQuery(query);
