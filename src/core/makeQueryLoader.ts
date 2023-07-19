@@ -894,11 +894,10 @@ export function makeQueryLoader<
                         endCursor: toCursor((rows[rows.length - 1] as any)?.[cursorColumns]),
                         cursors: rows.map((row: any) => {
                             if (row[cursorColumns]) {
-                                const { cursorcolumns } = row;
+                                const cursorcolumns = row[cursorColumns];
                                 delete row[cursorColumns];
                                 return toCursor(cursorcolumns);
                             }
-                            return null;
                         }),
                     };
                     const hasMore = nodes.length > slicedNodes.length;
@@ -917,10 +916,7 @@ export function makeQueryLoader<
                                 startCursor: cursors.startCursor,
                                 endCursor: cursors.endCursor,
                             }),
-                            count: await countPromise.catch(err => {
-                                console.error('Count query failed', err);
-                                return null;
-                            }),
+                            count: await countPromise.catch(err => null),
                         }
                     };
                 }).then((rows) => {

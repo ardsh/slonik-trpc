@@ -46,7 +46,7 @@ export type GenerateMockOptions<TLoader extends QueryLoader, TWhere=InferArgs<TL
     }
 }
 
-function mockZod(field: zod.ZodTypeAny, options?: GenerateMockOptions<any> & { fieldName?: string }): any {
+export function mockZod(field: zod.ZodTypeAny, options?: GenerateMockOptions<any> & { fieldName?: string }): any {
     if (typeof (field as any)?.shape === 'function') {
         return Object.fromEntries(Object.entries((field as any).shape()).map(([key, value]) => [key, mockZod(value as any, {
             ...options,
@@ -83,7 +83,7 @@ function mockZod(field: zod.ZodTypeAny, options?: GenerateMockOptions<any> & { f
     } else if (field instanceof zod.ZodDefault) {
         return (field._def as any)?.defaultValue();
     } else if (field instanceof zod.ZodLazy) {
-        return mockZod((field._def as any).getter()._def, options);
+        return mockZod((field._def as any).getter(), options);
     }
     if (field instanceof zod.ZodObject) {
         const shape = typeof field.shape === 'function' ? field.shape() : field.shape;

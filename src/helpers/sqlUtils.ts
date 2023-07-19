@@ -142,6 +142,7 @@ export const comparisonFilter = (
     if (conditions.length) {
         return sql.fragment`(${sql.join(conditions, sql.fragment`) AND (`)})`;
     }
+    return null;
 };
 
 /**
@@ -194,4 +195,5 @@ export const stringFilter = (
     if (conditions.length) {
         return sql.fragment`(${sql.join(conditions, sql.fragment`) AND (`)})`;
     }
+    return null;
 };
