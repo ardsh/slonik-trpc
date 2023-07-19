@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.13.6
+
+### Patch Changes
+
+-   7b1cb0d: Minor bugfixes
+
 ## 0.13.5
 
 ### Patch Changes
