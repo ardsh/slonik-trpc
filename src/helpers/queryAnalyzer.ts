@@ -1,8 +1,8 @@
 
-import * as zod from 'zod';
 import { sql, CommonQueryMethods } from 'slonik';
 import { Fragment, Query } from './types';
 import { makeQueryLoader, InferArgs } from '../core/makeQueryLoader';
+import { GenerateMockOptions, mockZod } from './zod';
 
 export type QueryLoader = Pick<ReturnType<typeof makeQueryLoader>, "getLoadArgs" | "getSelectableFields" | "load">;
 
@@ -37,66 +37,6 @@ export type ExplainOutput = {
     'QUERY PLAN': QueryPlanOutput[];
 };
 
-export type GenerateMockOptions<TLoader extends QueryLoader, TWhere=InferArgs<TLoader> extends { where?: infer TWhere } ? Omit<TWhere, "AND" | "OR" | "NOT"> : never> = {
-    zodMappers?: {
-        [key in keyof typeof zod]?: (field: string, zodType: zod.ZodTypeAny) => (typeof zod[key]) extends zod.ZodType<infer TOutput> ? TOutput : any;
-    },
-    mappers?: {
-        [key in keyof TWhere]?: () => TWhere[key];
-    }
-}
-
-export function mockZod(field: zod.ZodTypeAny, options?: GenerateMockOptions<any> & { fieldName?: string }): any {
-    if (typeof (field as any)?.shape === 'function') {
-        return Object.fromEntries(Object.entries((field as any).shape()).map(([key, value]) => [key, mockZod(value as any, {
-            ...options,
-            fieldName: key,
-        })]));
-    }
-    const fieldName = options?.fieldName || '';
-    if (options?.zodMappers && field?._def?.typeName in options.zodMappers) {
-        return (options.zodMappers as any)[field._def.typeName](fieldName, field);
-    }
-    if (options?.mappers && fieldName in options.mappers) {
-        return (options.mappers as any)[fieldName](fieldName, field);
-    }
-    if (field instanceof zod.ZodNumber) {
-        return 1;
-    } else if (field instanceof zod.ZodString) {
-        return '2023-01-01';
-    } else if (field instanceof zod.ZodArray) {
-        return Math.random() > 0.5 ? [mockZod((field._def as any).type, options)] : [];
-    } else if (field instanceof zod.ZodBoolean) {
-        return Math.random() > 0.5;
-    } else if (field instanceof zod.ZodUnion) {
-        return mockZod((field._def as any).options[0], options);
-    } else if (field instanceof zod.ZodEnum) {
-        return (field._def as any)?.values?.[0];
-    } else if (field instanceof zod.ZodNullable || field instanceof zod.ZodOptional) {
-        return mockZod((field._def as any).innerType, options);
-    } else if (field instanceof zod.ZodEffects) {
-        return mockZod((field._def as any).schema, options);
-    } else if (field instanceof zod.ZodNever) {
-        return undefined;
-    } else if (field instanceof zod.ZodNull) {
-        return null;
-    } else if (field instanceof zod.ZodDefault) {
-        return (field._def as any)?.defaultValue();
-    } else if (field instanceof zod.ZodLazy) {
-        return mockZod((field._def as any).getter(), options);
-    }
-    if (field instanceof zod.ZodObject) {
-        const shape = typeof field.shape === 'function' ? field.shape() : field.shape;
-        return Object.fromEntries(Object.entries(shape).map(([key, value]) => [key, mockZod(value as any, {
-            ...options,
-            fieldName: key,
-        })]));
-    }
-    if ((field as any)?._def?.type) {
-        return mockZod((field as any)._def, options);
-    }
-    return field._def?.typeName;
-}
 
 export function makeQueryAnalyzer(db: Pick<CommonQueryMethods, "any">) {
     const generateMockFilters = async <TLoader extends QueryLoader>(queryLoader: TLoader, options?: GenerateMockOptions<TLoader>) => {

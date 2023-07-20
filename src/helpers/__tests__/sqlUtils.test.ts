@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { sql } from 'slonik';
 import {
     rowToJson,
@@ -9,7 +10,13 @@ import {
     booleanFilter,
     comparisonFilter,
     stringFilter,
-} from '../sqlUtils';
+    arrayifyType,
+} from '../../utils';
+
+test("Arrayify type", () => {
+    const arrayString = arrayifyType(z.string());
+    expect(arrayString.parse('a')).toEqual(['a']);
+});
 
 describe('Filters', () => {
     it("Invert filter", () => {

@@ -1,8 +1,7 @@
 import { sql } from 'slonik';
 import { z } from 'zod';
 import { createFilters, makeFilter, mergeFilters } from '../queryFilter';
-import { arrayFilter, booleanFilter, dateFilter, dateFilterType } from '../../helpers/sqlUtils';
-import { arrayifyType } from '../../helpers/zod';
+import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } from '../../helpers/sqlUtils';
 
 const filtersOptions = createFilters()({
     id: arrayifyType(z.number()),

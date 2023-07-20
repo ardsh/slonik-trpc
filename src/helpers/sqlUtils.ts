@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import { sql } from 'slonik';
 import { Fragment } from './types';
-import { arrayifyType, notEmpty } from './zod';
+import { notEmpty } from './zod';
 
-export { arrayifyType };
+export const arrayifyType = <T extends z.ZodType>(type: T) =>
+z.preprocess(
+    (a) => (Array.isArray(a) ? a : [a].filter(notEmpty)),
+    z.union([z.array(type), type])
+);
 
 export const rowToJson = (fragment: Fragment, name?: string) => sql.fragment`
 row_to_json((SELECT row FROM (${fragment}) row)) AS ${sql.identifier([name || 'row_to_json'])}

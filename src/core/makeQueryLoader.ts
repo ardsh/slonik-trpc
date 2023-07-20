@@ -41,15 +41,14 @@ function getOrderByDirection(field: OrderField, reverse?: boolean) {
     }
 }
 
-function interpretFieldFragment(field: string | [string, string] | [string, string, string] | FragmentSqlToken): FragmentSqlToken {
+function interpretFieldFragment(field: SortField): FragmentSqlToken {
     if (typeof field === 'string' || Array.isArray(field)) {
         return sql.fragment`${sql.identifier(Array.isArray(field) ? field : [field])}`;
     }
-    return field;
+    return isBasicSortFieldOption(field) ? field : field.field;
 }
 function interpretOrderBy(field: OrderField, reverse?: boolean) {
-    const basicField = isBasicSortFieldOption(field[0]) ? field[0] : field[0].field;
-    return sql.fragment`${interpretFieldFragment(basicField)} ${getOrderByDirection(field, reverse)}`;
+    return sql.fragment`${interpretFieldFragment(field[0])} ${getOrderByDirection(field, reverse)}`;
 }
 
 type OptionalArray<T> = readonly T[] | T;
@@ -197,16 +196,13 @@ const countQueryType = z.object({
 });
 
 
-function getSelectedKeys(allKeys: string[], selected?: readonly any[], excluded?: readonly any[]) {
+function getSelectedKeys(allKeys: string[], selected?: readonly any[]) {
     const noneSelected = !selected?.length;
-    const noneExcluded = !excluded?.length;
-    if (noneSelected && noneExcluded) {
+    if (!noneSelected) {
+        return allKeys.filter(key => selected.includes(key));
+    } else {
         return allKeys;
     }
-    if (noneSelected && !noneExcluded) return allKeys.filter(key => !excluded.includes(key));
-    if (!noneSelected && noneExcluded) return allKeys.filter(key => selected.includes(key));
-    if (!noneSelected && !noneExcluded) return allKeys.filter(key => (!excluded.includes(key) && selected.includes(key)));
-    return allKeys;
 }
 
 export function makeQueryLoader<
@@ -380,12 +376,7 @@ export function makeQueryLoader<
     const orderByWithoutTransform = z.tuple([sortFields, orderDirection]);
     const cursorColumns = "cursorcolumns";
     const sortFieldWithTransform = sortFields.transform(field => {
-        const sortField = options.sortableColumns?.[field];
-        if (isBasicSortFieldOption(sortField)) {
-            return sortField || field;
-        } else {
-            return sortField?.field || field;
-        }
+        return options.sortableColumns?.[field] || field;
     });
     const orderByType = z.tuple([sortFieldWithTransform, orderDirection]);
 
@@ -611,18 +602,14 @@ export function makeQueryLoader<
             )} FROM root_query`;
         for (const plugin of (options.plugins || [])) {
             if (plugin.onGetQuery) {
-                try {
-                    plugin.onGetQuery({
-                        args: {
-                            ...allArgs,
-                            take,
-                            select,
-                        },
-                        query: finalQuery,
-                    });
-                } catch (e) {
-                    console.error(e);
-                }
+                plugin.onGetQuery({
+                    args: {
+                        ...allArgs,
+                        take,
+                        select,
+                    },
+                    query: finalQuery,
+                });
             }
         }
         return finalQuery;
@@ -688,7 +675,6 @@ export function makeQueryLoader<
                         return transformSortColumns([columns].filter(notEmpty) as any) || columns;
                     }
                 }
-                return columns;
             }) : (a) => (Array.isArray(a) && (Array.isArray(a[0]) || a[0] === undefined) ? a : [a].filter(notEmpty))),
             orderUnion
         );
@@ -916,7 +902,7 @@ export function makeQueryLoader<
                                 startCursor: cursors.startCursor,
                                 endCursor: cursors.endCursor,
                             }),
-                            count: await countPromise.catch(err => null),
+                            count: await countPromise,
                         }
                     };
                 }).then((rows) => {

@@ -317,6 +317,10 @@ describe("withQueryLoader", () => {
                 select: sql.fragment`SELECT *`,
                 from: sql.fragment`FROM test_table_bar`,
             },
+            contextFactory: (ctx) => ({
+                ...ctx,
+                newField: 'bob',
+            }),
             type: zodType,
         });
         const query = await loader.loadPagination({
@@ -327,6 +331,81 @@ describe("withQueryLoader", () => {
         expectTypeOf(query.nodes[0]).toEqualTypeOf<{ value: string }>();
         expect(loader.getSelectableFields()).not.toContain("someOtherField")
         expectTypeOf(loader.getSelectableFields()[0]).toEqualTypeOf<["id", "uid", "value"][number]>()
+    });
+
+    it("Warns if there's a semicolon at the end of the select query", async () => {
+        const origWarn = console.warn;
+        console.warn = jest.fn();
+        const loader = makeQueryLoader({
+            db,
+            query: {
+                select: sql.fragment`SELECT *;`,
+            },
+            type: zodType,
+        });
+        await expect(loader.load({
+            select: ['value', 'id'],
+            take: 1
+        })).rejects.toThrow("syntax error at or near");
+        expect(console.warn).toHaveBeenCalledTimes(2);
+        expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("Your query includes semicolons"));
+        expect(console.warn).toHaveBeenLastCalledWith(expect.stringContaining("Specify query.from"), expect.anything());
+        console.warn = origWarn;
+    });
+
+    it("Errors if some fields cannot be parsed", async () => {
+        const origError = console.warn;
+        console.error = jest.fn();
+        const loader = makeQueryLoader({
+            db,
+            query: {
+                select: sql.fragment`SELECT id`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
+            type: z.object({
+                id: z.string(),
+            }),
+        });
+        await expect(loader.load({
+            take: 1,
+        })).rejects.toThrow(/Query returned rows that do not conform/);
+        expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Expected string, received number"));
+        console.error = origError;
+    });
+
+    it("Doesn't check if parser is missing", async () => {
+        const data = await db.any(sql.fragment`SELECT 3 as number;` as any);
+        expect(data).toEqual([{
+            number: 3
+        }]);
+    });
+
+    it("Throws error if invalid zod type is provided", async () => {
+        expect(() => makeQueryLoader({
+            db,
+            query: {
+                select: sql.fragment`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
+            type: z.string() as any,
+        })).toThrow(`Invalid query type provided:`);
+    });
+
+    it("Throws error if DB is not provided", async () => {
+        const loader = makeQueryLoader({
+            query: {
+                select: sql.fragment`SELECT *;`,
+            },
+            type: zodType,
+        });
+        await expect(loader.load({
+            select: ['value', 'id'],
+            take: 1
+        })).rejects.toThrow("Database not provided");
+        await expect(loader.loadPagination({
+            select: ['value', 'id'],
+            take: 1
+        })).rejects.toThrow("Database not provided");
     });
 
     it("Throws errors that occur in virtual fields", async () => {
@@ -347,8 +426,7 @@ describe("withQueryLoader", () => {
             }
         });
 
-        // eslint-disable-next-line jest/valid-expect
-        expect(loader.load({
+        await expect(loader.load({
             select: ['value', 'ids'],
             take: 1
         })).rejects.toEqual("Error fetching!");
@@ -1718,12 +1796,12 @@ describe("withQueryLoader", () => {
         })).sql).toContain(`("email" > $1) OR ("email" = $2 AND "date_of_birth" IS NULL) OR ("email" = $3 AND "date_of_birth" IS NOT NULL AND "id" > $4)`);
         expect(decodeCursors(firstPage.pageInfo)).toEqual({
             start: {
-                dateOfBirth: null,
-                id: "r",
+                dateOfBirth: "1994-05-01T00:00:00",
+                id: "v",
             },
             end: {
-                dateOfBirth: null,
-                id: "s",
+                dateOfBirth: "1993-04-01T00:00:00",
+                id: "w",
             }
         });
         expect((await loader.getQuery({
