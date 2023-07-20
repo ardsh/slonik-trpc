@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.13.7
+
+### Patch Changes
+
+-   0c86154: Increased test coverage
+
 ## 0.13.6
 
 ### Patch Changes
