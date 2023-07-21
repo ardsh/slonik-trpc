@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.14.0
+
+### Minor Changes
+
+-   2770420: Breaking change: Changed virtual fields resolver 2nd argument to take full args instead of just context
+
 ## 0.13.7
 
 ### Patch Changes
