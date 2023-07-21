@@ -11,6 +11,8 @@ import {
     comparisonFilter,
     stringFilter,
     arrayifyType,
+    stringFilterType,
+    comparisonFilterType,
 } from '../../utils';
 
 test("Arrayify type", () => {
@@ -54,28 +56,28 @@ describe('Filters', () => {
     it("Comparison filter", () => {
         expect(comparisonFilter(null, sql.fragment`test`)).toBeNull();
         expect(comparisonFilter(undefined, sql.fragment`test`)).toBeNull();
-        expect(comparisonFilter({ _gt: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test > ${'1'})`);
-        expect(comparisonFilter({ _lt: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test < ${'1'})`);
-        expect(comparisonFilter({ _neq: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test != ${'1'})`);
-        expect(comparisonFilter({ _eq: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test = ${'1'})`);
-        expect(comparisonFilter({ _in: ['1', '2'] }, sql.fragment`test`)).toEqual(sql.fragment`(test = ANY(${sql.array(['1', '2'], 'text')}))`);
-        expect(comparisonFilter({ _nin: ['1', '2'] }, sql.fragment`test`)).toEqual(sql.fragment`(NOT ( test = ANY(${sql.array(['1', '2'], 'text')}) ))`);
-        expect(comparisonFilter({ _is_null: true }, sql.fragment`test`)).toEqual(sql.fragment`(test IS NULL)`);
-        expect(comparisonFilter({ _is_null: false }, sql.fragment`test`)).toEqual(sql.fragment`(test IS NOT NULL)`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _gt: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test > ${'1'})`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _lt: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test < ${'1'})`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _neq: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test != ${'1'})`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _eq: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test = ${'1'})`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _in: ['1', '2'] }), sql.fragment`test`)).toEqual(sql.fragment`(test = ANY(${sql.array(['1', '2'], 'text')}))`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _nin: ['1', '2'] }), sql.fragment`test`)).toEqual(sql.fragment`(NOT ( test = ANY(${sql.array(['1', '2'], 'text')}) ))`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _is_null: true }), sql.fragment`test`)).toEqual(sql.fragment`(test IS NULL)`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _is_null: false }), sql.fragment`test`)).toEqual(sql.fragment`(test IS NOT NULL)`);
     });
 
     it("String filter", () => {
         expect(stringFilter(null, sql.fragment`test`)).toBeNull();
         expect(stringFilter(undefined, sql.fragment`test`)).toBeNull();
-        expect(stringFilter({ _in: ['1', '2'] }, sql.fragment`test`)?.sql).toMatch(sql.fragment`(test = ANY(${sql.array(['1', '2'], 'text')}))`.sql);
-        expect(stringFilter({ _like: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test LIKE ${'1'})`);
-        expect(stringFilter({ _ilike: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test ILIKE ${'1'})`);
-        expect(stringFilter({ _nlike: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test NOT LIKE ${'1'})`);
-        expect(stringFilter({ _nilike: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test NOT ILIKE ${'1'})`);
-        expect(stringFilter({ _regex: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test ~ ${'1'})`);
-        expect(stringFilter({ _iregex: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test ~* ${'1'})`);
-        expect(stringFilter({ _nregex: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test !~ ${'1'})`);
-        expect(stringFilter({ _niregex: '1' }, sql.fragment`test`)).toEqual(sql.fragment`(test !~* ${'1'})`);
+        expect(stringFilter(stringFilterType.parse({ _in: ['1', '2'] }), sql.fragment`test`)?.sql).toMatch(sql.fragment`(test = ANY(${sql.array(['1', '2'], 'text')}))`.sql);
+        expect(stringFilter(stringFilterType.parse({ _like: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test LIKE ${'1'})`);
+        expect(stringFilter(stringFilterType.parse({ _ilike: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test ILIKE ${'1'})`);
+        expect(stringFilter(stringFilterType.parse({ _nlike: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test NOT LIKE ${'1'})`);
+        expect(stringFilter(stringFilterType.parse({ _nilike: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test NOT ILIKE ${'1'})`);
+        expect(stringFilter(stringFilterType.parse({ _regex: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test ~ ${'1'})`);
+        expect(stringFilter(stringFilterType.parse({ _iregex: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test ~* ${'1'})`);
+        expect(stringFilter(stringFilterType.parse({ _nregex: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test !~ ${'1'})`);
+        expect(stringFilter(stringFilterType.parse({ _niregex: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test !~* ${'1'})`);
     });
 });
 

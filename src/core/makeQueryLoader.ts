@@ -316,7 +316,15 @@ export function makeQueryLoader<
     virtualFields?: {
         [x in keyof TVirtuals]?: {
             /** Return the virtual field */
-            resolve: (row: z.infer<TObject>, ctx?: TContext) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
+            resolve: (row: z.infer<TObject>, args: LoadParameters<
+                z.infer<ZodPartial<TFilterTypes>>,
+                z.infer<TContextZod>,
+                z.infer<TObject>,
+                (keyof (z.infer<TObject>)) & TSelectable,
+                TSortable,
+                Exclude<keyof TGroups, number | symbol>,
+                boolean
+            >) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
     };
@@ -380,27 +388,35 @@ export function makeQueryLoader<
     });
     const orderByType = z.tuple([sortFieldWithTransform, orderDirection]);
 
-    const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], select?: readonly string[], ctx?: z.infer<TContextZod>): Promise<readonly T[]> => {
+    const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], args: LoadParameters<
+        z.infer<ZodPartial<TFilterTypes>>,
+        TContext,
+        TVirtuals & z.infer<TObject>,
+        (keyof (TVirtuals & z.infer<TObject>)) & TSelectable,
+        TSortable,
+        Exclude<keyof TGroups, number | symbol>,
+        boolean
+    >): Promise<readonly T[]> => {
         if (!rows.length) return rows;
         if (options.virtualFields) {
             const keys = Object.keys(options.virtualFields);
-            const selected = getSelectedKeys(keys, select);
+            const selected = getSelectedKeys(keys, args.select);
             if (selected.length) {
                 const { default: Nativebird } = await import('nativebird');
                 await Promise.all(selected.map(async key => {
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    const firstResolve = options.virtualFields![key]!.resolve(rows[0], ctx);
+                    const firstResolve = options.virtualFields![key]!.resolve(rows[0], args);
                     if (typeof (firstResolve as PromiseLike<any>)?.then === 'function') {
                         await Nativebird.map(rows.slice(1), async (row: any) => {
                             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                            row[key] = await options.virtualFields![key]!.resolve(row, ctx);
+                            row[key] = await options.virtualFields![key]!.resolve(row, args);
                         }, { concurrency: options?.options?.runConcurrency || 50 });
                         (rows as any)[0][key] = await firstResolve;
                     } else {
                         (rows as any)[0][key] = firstResolve;
                         for (const row of rows.slice(1) as any[]) {
                             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                            row[key] = options.virtualFields![key]!.resolve(row, ctx);
+                            row[key] = options.virtualFields![key]!.resolve(row, args);
                         }
                     }
                 }));
@@ -757,7 +773,11 @@ export function makeQueryLoader<
                 }
             }
             const load = () => db.any(finalQuery).then(async rows => {
-                return mapTransformRows(reverse ? (rows as any).reverse() as never : rows, args.select, args.ctx);
+                return mapTransformRows(reverse ? (rows as any).reverse() as never : rows, {
+                    // Backwards compatible with ctx
+                    ...args.ctx,
+                    ...args,
+                });
             }).then(async rows => {
                 // Call the onLoadDone method of each plugin
                 for (const onLoadDone of afterCalls) {
@@ -888,7 +908,10 @@ export function makeQueryLoader<
                     };
                     const hasMore = nodes.length > slicedNodes.length;
                     const hasPrevious = !!args.skip || (!!allArgs.cursor || !!allArgs.searchAfter);
-                    const allRows = await mapTransformRows(rows, args.select, args.ctx)
+                    const allRows = await mapTransformRows(rows, {
+                        ...args.ctx,
+                        ...args,
+                    })
                     return {
                         nodes: allRows,
                         ...(cursors && {

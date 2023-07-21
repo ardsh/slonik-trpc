@@ -1,4 +1,4 @@
-import { makeQueryLoader, InferPayload, InferArgs } from '../makeQueryLoader';
+import { makeQueryLoader, InferPayload, InferArgs } from '../../index';
 import { sql } from 'slonik';
 import { z } from 'zod';
 import { makeQueryTester } from './makeQueryTester';
@@ -135,11 +135,13 @@ describe("withQueryLoader", () => {
             },
             virtualFields: {
                 ids: {
-                    resolve: (row, ctx) => {
-                        expect(ctx).toEqual({
-                            userId: 'r',
-                        });
-                        return row.id + row.uid + ctx.userId;
+                    resolve: (row, args) => {
+                        expect(args).toEqual(expect.objectContaining({
+                            ctx: {
+                                userId: 'r',
+                            },
+                        }));
+                        return row.id + row.uid + args.ctx.userId;
                     },
                     dependencies: ["id", "uid"],
                 }
@@ -207,7 +209,7 @@ describe("withQueryLoader", () => {
         expect(resolve).not.toHaveBeenCalled();
     });
 
-    it("Passes the context as a 2nd parameter in virtual field resolvers", async () => {
+    it("Passes the args as a 2nd parameter in virtual field resolvers", async () => {
         const loader = makeQueryLoader({
             db,
             query: {
@@ -219,11 +221,11 @@ describe("withQueryLoader", () => {
             }),
             virtualFields: {
                 ids: {
-                    resolve: async (row, ctx) => {
-                        expect(ctx).toEqual({
+                    resolve: async (row, args) => {
+                        expect(args.ctx).toEqual({
                             userId: 'z'
                         });
-                        expectTypeOf(ctx).toEqualTypeOf<{ userId: string } | undefined>();
+                        expectTypeOf(args.ctx).toEqualTypeOf<{ userId: string } | undefined>();
                         return Promise.resolve(row.id + row.uid);
                     },
                     dependencies: ["id", "uid"],

@@ -58,7 +58,7 @@ export function makeQueryAnalyzer(db: Pick<CommonQueryMethods, "any">) {
             return db
             .any(sql.unsafe`EXPLAIN (ANALYZE, FORMAT JSON) ${query}`)
             .then((a: readonly ExplainOutput[]) => {
-                const result = a[0]?.['QUERY PLAN']?.[0];
+                const result = a[0]['QUERY PLAN'][0];
                 return {
                     execution: result['Execution Time'],
                     planning: result['Planning Time'],
@@ -77,21 +77,22 @@ export function makeQueryAnalyzer(db: Pick<CommonQueryMethods, "any">) {
             concurrency?: number;
             args?: Omit<InferArgs<TLoader>, "select"> & { ctx?: any };
         }) => {
+            const { iterations=1, concurrency=1, args } = options || {};
             const { default: Nativebird } = await import('nativebird');
             const selectableFields = queryLoader.getSelectableFields();
             // Analyze every selectable field separately, and then compare which fields take the most time
             const promises = await Nativebird.map(selectableFields, async (field) => {
                 const query = await (queryLoader as any).getQuery({
                     take: 100,
-                    ...options?.args,
+                    ...args,
                     select: [field]
                 });
                 let totalTime = 0;
-                for (let i = 0; i < (options?.iterations || 1); i++) {
+                for (let i = 0; i < iterations; i++) {
                     totalTime += await self.analyzeQuery(query).then((a) => a.execution + a.planning);
                 }
                 return [field, totalTime];
-            }, { concurrency: options?.concurrency ?? 1 });
+            }, { concurrency });
             return Object.fromEntries(promises) as {
                 [key in ReturnType<TLoader["getSelectableFields"]>[number]]: number;
             };

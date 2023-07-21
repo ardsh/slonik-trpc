@@ -2,7 +2,7 @@ import { sql } from 'slonik';
 import { z } from 'zod';
 
 import { makeQueryTester } from '../../core/__tests__/makeQueryTester';
-import { makeQueryAnalyzer } from '../queryAnalyzer';
+import { makeQueryAnalyzer } from '../../utils';
 import { mockZod } from '../zod';
 import { makeQueryLoader } from '../../core/makeQueryLoader';
 
@@ -71,6 +71,12 @@ it("Benchmarks a query loader's selectable fields", async () => {
         zodMappers: {
             date: () => "2021-01-01",
         },
+    });
+    const defaultSettings = await analyzer.benchmarkQueryLoaderFields(loader);
+    expect(defaultSettings).toEqual({
+        id: expect.any(Number),
+        uid: expect.any(Number),
+        value: expect.any(Number),
     });
 });
 

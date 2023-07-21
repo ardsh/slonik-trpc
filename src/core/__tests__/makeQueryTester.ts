@@ -1,6 +1,6 @@
 import { createPool, CommonQueryMethods, sql } from 'slonik';
 import { createQueryLoggingInterceptor } from "slonik-interceptor-query-logging";
-import { createResultParserInterceptor } from '../../helpers/resultParserInterceptor';
+import { createResultParserInterceptor } from '../../utils';
 
 export function getPostgresUrl(): string {
     return process.env.POSTGRES_DSN || `postgres://${encodeURIComponent(process.env.PGUSER || 'postgres')}:${encodeURIComponent(process.env.PGPASSWORD || '')}@${

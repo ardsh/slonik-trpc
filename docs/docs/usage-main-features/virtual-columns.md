@@ -36,7 +36,7 @@ If you're loading results manually using getQuery you won't get the virtual fiel
 
 ### Using ctx when resolving
 
-The context is passed as the 2nd argument to each virtual field resolver.
+The query arguments are passed as the 2nd argument to each virtual field resolver.
 This can be used to return a field based on the context, e.g.
 
 ```ts
@@ -45,8 +45,8 @@ const virtualFieldsLoader = makeQueryLoader({
     virtualFields: {
         content: {
             dependencies: ["content"],
-            resolve(row, ctx) {
-                if (!ctx.isLoggedIn) {
+            resolve(row, args) {
+                if (!args.ctx.isLoggedIn) {
                     // Return null if user isn't logged in.
                     return null;
                 }
