@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.14.1
+
+### Patch Changes
+
+-   d4c55ad: Fixed rowsToArray utility function
+
 ## 0.14.0
 
 ### Minor Changes
