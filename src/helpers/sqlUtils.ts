@@ -25,7 +25,7 @@ SELECT row_to_json((
         ) AS "element"
     )) AS "rows"
     ${fromFragment}
-) all
+) all_rows
 ) AS ${sql.identifier([name || 'rows_to_array'])}
 `;
 

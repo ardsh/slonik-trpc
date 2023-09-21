@@ -3,9 +3,10 @@ import { createQueryLoggingInterceptor } from "slonik-interceptor-query-logging"
 import { createResultParserInterceptor } from '../../utils';
 
 export function getPostgresUrl(): string {
-    return process.env.POSTGRES_DSN || `postgres://${encodeURIComponent(process.env.PGUSER || 'postgres')}:${encodeURIComponent(process.env.PGPASSWORD || '')}@${
+    const defaultUrl = `postgres://${encodeURIComponent(process.env.PGUSER || 'postgres')}:${encodeURIComponent(process.env.PGPASSWORD || '')}@${
         process.env.PGHOST || '0.0.0.0'
     }:${process.env.PGPORT || '5432'}/${process.env.PGDATABASE || 'postgres'}`;
+    return process.env.POSTGRES_DSN || defaultUrl;
 }
 
 export function makeQueryTester(namespace?: string) {

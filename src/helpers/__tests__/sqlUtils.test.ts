@@ -81,11 +81,45 @@ describe('Filters', () => {
     });
 });
 
+import { makeQueryTester } from '../../core/__tests__/makeQueryTester';
+
 describe("Query builders", () => {
+    const { db } = makeQueryTester('builders');
     it("Row to json", () => {
         expect(rowToJson(sql.fragment`test`, 'test')?.sql).toMatch(`row_to_json`);
     });
     it("Rows to array", () => {
         expect(rowsToArray(sql.fragment`test`, sql.fragment`FROM`, 'test')?.sql).toMatch('json_agg');
+    });
+
+    it("Selects rows to array", async () => {
+        const result = await db.any(sql.unsafe`SELECT ${
+            rowsToArray(
+                sql.fragment`SELECT email, date_of_birth`,
+                sql.fragment`FROM users`,
+                'users'
+            )
+        }`);
+        expect(result).toEqual([{
+            users: expect.arrayContaining([{
+                email: expect.any(String),
+                date_of_birth: expect.any(String),
+            }])
+        }]);
+    });
+
+    it("Selects row to object", async () => {
+        const result = await db.any(sql.unsafe`SELECT ${
+            rowToJson(
+                sql.fragment`SELECT email, date_of_birth FROM users LIMIT 1`,
+                'user'
+            )
+        }`);
+        expect(result).toEqual([{
+            user: {
+                email: expect.any(String),
+                date_of_birth: expect.any(String),
+            }
+        }]);
     });
 });
