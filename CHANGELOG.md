@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.14.2
+
+### Patch Changes
+
+-   c79cd97: feat: Added the ability to transform sql column names
+
 ## 0.14.1
 
 ### Patch Changes
