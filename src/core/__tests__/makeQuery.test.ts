@@ -8,7 +8,17 @@ import { createGroupSelector } from '../selectGroups';
 import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } from '../../helpers/sqlUtils';
 import { expectTypeOf } from 'expect-type';
 import { createOptions } from '../../index';
+import { snakeCase } from "change-case";
+import {
+    createFieldNameTransformationInterceptor
+} from 'slonik-interceptor-field-name-transformation';
 import { useSlowQueryPlugin } from '../plugins';
+
+const interceptors = [
+    createFieldNameTransformationInterceptor({
+        format: 'CAMEL_CASE'
+    })
+];
 
 const decodeCursors = ({ startCursor='', endCursor='' }) => {
     return {
@@ -18,7 +28,9 @@ const decodeCursors = ({ startCursor='', endCursor='' }) => {
 }
 
 describe("withQueryLoader", () => {
-    const { db } = makeQueryTester();
+    const { db } = makeQueryTester(undefined, {
+        interceptors,
+    });
 
     it("works with querying", async () => {
         const result = await db.any(sql.unsafe`SELECT 3 as number;`);
@@ -558,7 +570,7 @@ describe("withQueryLoader", () => {
                 }
             }
         });
-        const query = await await loader.getQuery({
+        const query = await loader.getQuery({
             take: 1,
             where: {
                 largeIds: true,
@@ -844,7 +856,7 @@ describe("withQueryLoader", () => {
             },
         });
         const take = 1;
-        const query = await await loader.getQuery({
+        const query = await loader.getQuery({
             takeCursors: true,
             take,
             orderBy: ["id", "ASC"],
@@ -2450,5 +2462,29 @@ describe("withQueryLoader", () => {
         });
 
         expect(spy).toHaveBeenCalled();
+    });
+
+    it("Allows you to work with camelCase field interceptors through transform columns", async () => {
+        const loader = makeQueryLoader({
+            db,
+            options: {
+                transformColumns: column => snakeCase(column),
+            },
+            query: {
+                select: sql.type(z.object({
+                    id: z.string(),
+                    firstName: z.string(),
+                    lastName: z.string(),
+                }))`SELECT *`,
+                from: sql.fragment`FROM users`,
+            },
+        });
+        const query = await loader.load({
+            take: 1,
+            select: ["id", "firstName", "lastName"]
+        });
+
+        expectTypeOf(query[0]).toEqualTypeOf<{ id: string, firstName: string, lastName: string }>();
+        expect(query[0]?.firstName).toBeDefined();
     });
 });

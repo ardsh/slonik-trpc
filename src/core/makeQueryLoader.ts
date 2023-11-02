@@ -330,6 +330,22 @@ export function makeQueryLoader<
     };
     options?: {
         /**
+         * This allows you to transform the column names of the selected object, before they're used to create the SQL query.
+         * Useful if you've got a [slonik interceptor for camelCase columns.](https://github.com/gajus/slonik-interceptor-field-name-transformation)
+         * 
+         * So in case you have a interceptor that converts snake case to camelCase, you have to do the reverse here, like this:
+         * 
+         * ```
+         * import { snakeCase } from 'changeCase';
+         * transformColumns: (field) => snakeCase(field)
+         * ```
+         * 
+         * By converting a camelCase back to snake_case you ensure the SQL query will be correct.
+         * You can also use an object map if you need, or some other method.
+         * This is mostly to be used as an escape hatch for slonik interceptors that transform rows.
+         * */
+        transformColumns?: (column: TSelectable) => string,
+        /**
          * EXPERIMENTAL SUPPORT
          * 
          * If specified true, the engine will try to use SQLite syntax instead of PostgreSQL syntax.
@@ -507,6 +523,11 @@ export function makeQueryLoader<
             })) : (isPartial ? type.partial() : type) as any;
         const fields = Object.keys(type?.keyof?.()?.Values || {}) as any[];
         const selectable = options?.selectableColumns;
+        const hasTransformColumns = typeof options?.options?.transformColumns === 'function';
+        if (hasTransformColumns) {
+            select = (select || []).map((field) => options?.options?.transformColumns?.(field) ?? field) as any[];
+        }
+        const sqlFields = hasTransformColumns ? fields.map(field => options?.options?.transformColumns?.(field) ?? field) : fields
         select = (select || [])
             .filter(field => !selectable?.length || selectable.indexOf(field) >= 0)
             // Add dependencies from selected fields.
@@ -514,8 +535,8 @@ export function makeQueryLoader<
                 field,
                 ...((options?.virtualFields?.[field]?.dependencies as any[]) || []),
             ])
-            .filter((field) => !fields?.length || fields?.indexOf(field) >= 0);
-        const finalKeys = Array.from(new Set(fields
+            .filter((field) => !fields?.length || sqlFields?.indexOf(field) >= 0);
+        const finalKeys = Array.from(new Set(sqlFields
             .filter(notEmpty)
             .filter((column) => noneSelected || select?.includes(column as any))
         ).values()).map(a => sql.identifier([a])) as any[];

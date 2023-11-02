@@ -1,4 +1,4 @@
-import { createPool, CommonQueryMethods, sql } from 'slonik';
+import { createPool, CommonQueryMethods, sql, ClientConfiguration } from 'slonik';
 import { createQueryLoggingInterceptor } from "slonik-interceptor-query-logging";
 import { createResultParserInterceptor } from '../../utils';
 
@@ -9,9 +9,11 @@ export function getPostgresUrl(): string {
     return process.env.POSTGRES_DSN || defaultUrl;
 }
 
-export function makeQueryTester(namespace?: string) {
+export function makeQueryTester(namespace?: string, options?: Partial<ClientConfiguration>) {
     const pool = createPool(getPostgresUrl(), {
+        ...options,
         interceptors: [
+            ...(options?.interceptors || []),
             createQueryLoggingInterceptor(),
             createResultParserInterceptor(),
         ],
