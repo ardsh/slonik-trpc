@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.14.3
+
+### Patch Changes
+
+-   e934989: fix: Fixed virtual fields transform columns
+
 ## 0.14.2
 
 ### Patch Changes
