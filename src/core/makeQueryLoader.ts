@@ -523,11 +523,6 @@ export function makeQueryLoader<
             })) : (isPartial ? type.partial() : type) as any;
         const fields = Object.keys(type?.keyof?.()?.Values || {}) as any[];
         const selectable = options?.selectableColumns;
-        const hasTransformColumns = typeof options?.options?.transformColumns === 'function';
-        if (hasTransformColumns) {
-            select = (select || []).map((field) => options?.options?.transformColumns?.(field) ?? field) as any[];
-        }
-        const sqlFields = hasTransformColumns ? fields.map(field => options?.options?.transformColumns?.(field) ?? field) : fields
         select = (select || [])
             .filter(field => !selectable?.length || selectable.indexOf(field) >= 0)
             // Add dependencies from selected fields.
@@ -535,7 +530,12 @@ export function makeQueryLoader<
                 field,
                 ...((options?.virtualFields?.[field]?.dependencies as any[]) || []),
             ])
-            .filter((field) => !fields?.length || sqlFields?.indexOf(field) >= 0);
+            .filter((field) => !fields?.length || fields?.indexOf(field) >= 0);
+        const hasTransformColumns = typeof options?.options?.transformColumns === 'function';
+        if (hasTransformColumns) {
+            select = select.map((field) => options?.options?.transformColumns?.(field) ?? field) as any[];
+        }
+        const sqlFields = hasTransformColumns ? fields.map(field => options?.options?.transformColumns?.(field) ?? field) : fields;
         const finalKeys = Array.from(new Set(sqlFields
             .filter(notEmpty)
             .filter((column) => noneSelected || select?.includes(column as any))

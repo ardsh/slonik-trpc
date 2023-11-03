@@ -2487,4 +2487,40 @@ describe("withQueryLoader", () => {
         expectTypeOf(query[0]).toEqualTypeOf<{ id: string, firstName: string, lastName: string }>();
         expect(query[0]?.firstName).toBeDefined();
     });
+
+    it("Works with camelCase fields even when they're just dependencies of virtual fields", async () => {
+        const loader = makeQueryLoader({
+            db,
+            options: {
+                transformColumns: column => snakeCase(column),
+            },
+            selectableColumns: ["id", "name"],
+            virtualFields: {
+                name: {
+                    dependencies: ["firstName", "lastName"],
+                    resolve(row) {
+                        return `${row.firstName} ${row.lastName}`;
+                    },
+                }
+            },
+            query: {
+                select: sql.type(z.object({
+                    id: z.string(),
+                    firstName: z.string(),
+                    lastName: z.string(),
+                }))`SELECT *`,
+                from: sql.fragment`FROM users`,
+            },
+        });
+        const query = await loader.load({
+            take: 1,
+            select: ["id", "name"]
+        });
+
+        expectTypeOf(query[0]).toEqualTypeOf<{ id: string, name: string }>();
+        // @ts-expect-error firstName is not technically selected, but should be returned nonetheless
+        expect(query[0]?.firstName).toBeDefined();
+        // @ts-expect-error names are not selected
+        expect(query[0].name).toEqual(query[0].firstName + " " + query[0].lastName);
+    });
 });
