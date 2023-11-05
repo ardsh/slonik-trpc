@@ -1,6 +1,6 @@
-import { sql, QuerySqlToken } from 'slonik';
+import type { QuerySqlToken, FragmentSqlToken } from 'slonik';
 
-export type Fragment = ReturnType<typeof sql["fragment"]>;
+export type Fragment = FragmentSqlToken;
 export type { QuerySqlToken  as Query };
 
 

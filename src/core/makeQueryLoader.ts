@@ -1,11 +1,12 @@
 import { sql, CommonQueryMethods, QuerySqlToken, SqlFragment, FragmentSqlToken } from "slonik";
 import { z } from 'zod';
 import { notEmpty } from "../helpers/zod";
-import { FilterOptions, Interpretors, makeFilter, RecursiveFilterConditions, recursiveFilterConditions, ZodPartial } from "./queryFilter";
+import { FilterOptions, Interpretors, RecursiveFilterConditions } from "./queryFilter";
 import { debug } from '../helpers/debug';
 import { fromCursor, toCursor } from "../helpers/cursors";
 import type { Plugin } from "./plugins/types";
 import { PromiseOrValue } from "../helpers/types";
+import { buildView, BuildView } from "./buildView";
 
 const orderDirection = z.enum(["ASC", "DESC"]);
 type OrderDirection = z.infer<typeof orderDirection>;
@@ -208,7 +209,8 @@ function getSelectedKeys(allKeys: string[], selected?: readonly any[]) {
 export function makeQueryLoader<
     TContextZod extends z.ZodTypeAny,
     TFragment extends SqlFragment | QuerySqlToken,
-    TFilterTypes extends Record<string, z.ZodTypeAny>=never,
+    TView extends BuildView<TFilterTypes, keyof TFilterTypes>,
+    TFilterTypes extends Record<string, any>=TView extends BuildView<infer T> ? T : never,
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
     TVirtuals extends Record<string, any> = z.infer<TObject>,
     TSortable extends string = never,
@@ -224,9 +226,11 @@ export function makeQueryLoader<
         select: TFragment,
         /** The FROM part of the query. Should start with `FROM` */
         from?: SqlFragment,
+        /** The view from buildView utility. Used to provide filters and the FROM clause. */
+        view?: TView,
         /** The GROUP BY part of the query. Don't include `GROUP BY` */
         groupBy?: SqlFragment | ((args: LoadParameters<
-            z.infer<ZodPartial<TFilterTypes>>,
+            Partial<TFilterTypes>,
             TContext,
             TVirtuals & z.infer<TObject>,
             (keyof (TVirtuals & z.infer<TObject>)) & TSelectable,
@@ -252,8 +256,8 @@ export function makeQueryLoader<
     contextFactory?: (userContext?: z.infer<TContextZod>) => TContext,
     db?: Pick<CommonQueryMethods, "any">
     /**
-     * You can use the {@link createFilters} helper for this argument.
-     * Make sure the fields they reference are accessible from the main query
+     * DEPRECATED: Use `view` instead.
+     * You can use the {@link buildView} to build relations with their own filters.
      * */
     filters?: {
         filters: TFilterTypes,
@@ -317,7 +321,7 @@ export function makeQueryLoader<
         [x in keyof TVirtuals]?: {
             /** Return the virtual field */
             resolve: (row: z.infer<TObject>, args: LoadParameters<
-                z.infer<ZodPartial<TFilterTypes>>,
+                TFilterTypes,
                 z.infer<TContextZod>,
                 z.infer<TObject>,
                 (keyof (z.infer<TObject>)) & TSelectable,
@@ -372,10 +376,19 @@ export function makeQueryLoader<
 }) {
     const queryComponents = options.query;
     const query = queryComponents.select;
-    const fromFragment = queryComponents.from;
+    let view = queryComponents.view;
+    const fromFragment = queryComponents.from || view?.getFromFragment();
+    if (options.filters && !view && fromFragment) {
+        // backwards compatible if only filters are specified
+        view = buildView`${fromFragment}`
+            .addFilters(options.filters.interpreters as any) as any;
+    }
     if (query.sql.match(/;\s*$/)) {
         // TODO: Add more checks for invalid queries
         console.warn("Your query includes semicolons at the end. Please refer to the documentation of slonik-trpc, and do not include semicolons in the query:\n " + query.sql);
+    }
+    if (options.filters && !queryComponents.view) {
+        console.warn("Deprecation warning: Specify views with buildView instead of filters in makeQueryLoader");
     }
     if (!fromFragment) {
         console.warn("Deprecation warning: Specify query.from and query.select separately in makeQueryLoader", query?.sql);
@@ -390,8 +403,10 @@ export function makeQueryLoader<
     // @ts-expect-error accessing internal _any
     const isAnyType = type._any === true;
     if (!isAnyType && (!type || !type.keyof || !type.partial)) throw new Error('Invalid query type provided: ' + (type));
-    type TFilter = z.infer<ZodPartial<TFilterTypes>>;
-    const interpretFilters = options?.filters?.interpreters ? makeFilter<TFilterTypes, TContext>(options.filters.interpreters, options.filters?.options) : null;
+    type TFilter = {
+        [x in keyof TFilterTypes]?: TFilterTypes[x] extends z.ZodTypeAny ? z.infer<TFilterTypes[x]> : TFilterTypes[x]
+    }
+    const interpretFilters = view ? view.getWhereConditions : null;
     const sortableAliases = Object.keys(options?.sortableColumns || {}) as [TSortable, ...TSortable[]];
     const sortFields = sortableAliases.length
             ? z.enum(sortableAliases)
@@ -405,7 +420,7 @@ export function makeQueryLoader<
     const orderByType = z.tuple([sortFieldWithTransform, orderDirection]);
 
     const mapTransformRows = async <T extends z.TypeOf<TObject>>(rows: readonly T[], args: LoadParameters<
-        z.infer<ZodPartial<TFilterTypes>>,
+        TFilterTypes,
         TContext,
         TVirtuals & z.infer<TObject>,
         (keyof (TVirtuals & z.infer<TObject>)) & TSelectable,
@@ -474,13 +489,14 @@ export function makeQueryLoader<
             selectGroups,
         } = allArgs;
         const context = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
-        const filtersCondition = await interpretFilters?.(where || ({} as any), context);
+        const filtersCondition = await interpretFilters?.({ where: where || ({} as any), ctx: context });
         const authConditions = await options?.constraints?.(context);
         const auth = Array.isArray(authConditions) ? authConditions : [authConditions].filter(notEmpty);
-        const whereCondition = auth.length ? sql.fragment`(${sql.join(
-            [...auth, filtersCondition].filter(notEmpty),
+        const allConditions = [...auth, ...(filtersCondition || [])].filter(notEmpty);
+        const whereCondition = allConditions.length ? sql.fragment`(${sql.join(
+            allConditions,
             sql.fragment`) AND (`
-        )})` : filtersCondition;
+        )})` : sql.fragment`TRUE`;
         let actualQuery = query;
         if (selectGroups?.length) {
             const groupFields = selectGroups.flatMap(group => options.columnGroups?.[group] || []);
@@ -716,7 +732,21 @@ export function makeQueryLoader<
             orderUnion
         );
         type ActualFilters = [TFilterTypes] extends [never] ? never : RecursiveFilterConditions<
-            z.infer<ZodPartial<TFilterTypes>>, TFiltersDisabled>;
+            TFilter, Extract<TFiltersDisabled, "AND" | "OR" | "NOT">>;
+
+        const filterKeys = Object.keys(options.query.view?.getFilters() || options?.filters?.filters || {})
+        const filterType: any = z.lazy(() =>
+            z.object({
+                ...(filterKeys.reduce((acc, key) => {
+                    acc[key] = z.any();
+                    return acc;
+                }, {} as Record<string, any>)),
+                ...(!(disabledFilters as any)?.OR && { OR: z.array(filterType) }),
+                ...(!(disabledFilters as any)?.AND && { AND: z.array(filterType) }),
+                ...(!(disabledFilters as any)?.NOT && { NOT: filterType }),
+            }).partial()
+        );
+
         return z.object({
             /** The fields that should be included. If unspecified, all fields are returned. */
             select: z.array(fields).optional(),
@@ -736,7 +766,7 @@ export function makeQueryLoader<
             orderBy: options?.defaults?.orderBy ?
                 orderBy.default(options.defaults.orderBy) as never :
                 orderBy as unknown as typeof orderUnion,
-            where: options?.filters?.filters ? recursiveFilterConditions(options?.filters?.filters, disabledFilters).nullish() as unknown as z.ZodType<ActualFilters> : z.null() as never,
+            where: filterKeys.length ? filterType as unknown as z.ZodType<ActualFilters> : z.null() as never,
         }).partial();
     };
     const self = {

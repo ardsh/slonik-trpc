@@ -100,21 +100,6 @@ exports[`withQueryLoader Allows using sql fragment for specifying sortable colum
 ]
 `;
 
-exports[`withQueryLoader Doesn't allow invalid types 1`] = `
-"[
-  {
-    "code": "invalid_type",
-    "expected": "number",
-    "received": "string",
-    "path": [
-      "where",
-      "id"
-    ],
-    "message": "Expected number, received string"
-  }
-]"
-`;
-
 exports[`withQueryLoader Doesn't allow sorting by unallowed columns 1`] = `
 "[
   {

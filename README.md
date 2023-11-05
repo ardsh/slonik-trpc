@@ -205,6 +205,38 @@ const specificUsers = await filtersLoader.load({
 
 However, these too can be disabled (when calling `getLoadArgs`), and it is recommended to do so for the `OR` filter, which is often computationally expensive and shouldn't be allowed on a public API.
 
+### Declaring filters through View Relations
+
+An easier way to declare and reuse the above filters is by using `buildView`
+
+```ts
+buildView`FROM users`
+    .addInArrayFilter('users.id')
+    .addStringFilter(['users.name', 'users.profession'])
+    .addComparisonFilter('postsCount', (table) => sql.fragment`${table}."authoredPosts"`)
+    .addComparisonFilter('users.created_at')
+    .addGenericFilter('ID', (value: string) => sql.fragment`users.id = ${value}`)
+    .addBooleanFilter('isGmail', (table) => sql.fragment`${table}.email ILIKE '%gmail.com'`)
+```
+
+This is the equivalent of the above. It allows an extensive filtering API through those helper functions like `addStringFilter` and `addInArrayFilter`
+
+```ts
+where: {
+    ID: 'abc',
+    isGmail: true,
+    postsCount: {
+        _gte: 30,
+    },
+    "users.profession": {
+        _ilike: '%engineer%',
+    },
+    "users.created_at": {
+        _lt: '2020-01-01',
+    },
+}
+```
+
 ### Authorization
 
 For authorization checks, use the `constraints` option to add hardcoded conditions to the query, based on the context.

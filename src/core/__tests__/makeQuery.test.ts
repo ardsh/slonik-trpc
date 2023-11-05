@@ -964,27 +964,6 @@ describe("withQueryLoader", () => {
         expectTypeOf(parsed.where).toEqualTypeOf<undefined>();
     });
 
-    it("Doesn't allow invalid types", async () => {
-        const loader = makeQueryLoader({
-            ...genericOptions,
-            selectableColumns: ["id", "uid"],
-            sortableColumns: {
-                id: "id",
-            }
-        });
-        const parser = loader.getLoadArgs({
-            sortableColumns: ["id"],
-        });
-        const where = {
-            id: 'invalidType',
-            largeIds: true,
-            someOtherField: null,
-        }
-        expect(() => parser.parse({
-            where,
-        })).toThrowErrorMatchingSnapshot();
-    });
-
     it("Doesn't allow sorting by unallowed columns", async () => {
         const loader = makeQueryLoader({
             ...genericOptions,

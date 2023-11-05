@@ -19,36 +19,6 @@ export type RecursiveFilterConditions<TFilter, TDisabled extends "AND" | "OR" | 
     NOT?: RecursiveFilterConditions<TFilter>;
 }, TDisabled>;
 
-type ZodRecursiveFilterConditions<TFilter extends Record<string, z.ZodType>> =
-    TFilter & {
-        AND: z.ZodOptional<
-            z.ZodArray<z.ZodObject<ZodRecursiveFilterConditions<TFilter>>>
-        >;
-        OR: z.ZodOptional<
-            z.ZodArray<z.ZodObject<ZodRecursiveFilterConditions<TFilter>>>
-        >;
-        NOT: z.ZodOptional<z.ZodObject<ZodRecursiveFilterConditions<TFilter>>>;
-    };
-
-export const recursiveFilterConditions = <
-    TFilter extends Record<string, z.ZodType>,
->(
-    filter: TFilter,
-    disabledFilters?: {
-        [x in "AND" | "OR" | "NOT"]?: boolean
-    },
-): z.ZodObject<ZodRecursiveFilterConditions<TFilter>> => {
-    const filterType: any = z.lazy(() =>
-        z.object({
-            ...filter,
-            ...(!disabledFilters?.OR && { OR: z.array(filterType) }),
-            ...(!disabledFilters?.AND && { AND: z.array(filterType) }),
-            ...(!disabledFilters?.NOT && { NOT: filterType }),
-        }).partial()
-    );
-    return filterType;
-};
-
 export type ZodPartial<TFilter extends Record<string, z.ZodType>> =
     z.ZodOptional<
         z.ZodObject<{
