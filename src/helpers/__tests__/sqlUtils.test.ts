@@ -44,6 +44,8 @@ describe('Filters', () => {
         expect(dateFilter({}, sql.fragment`test`)).toBeNull();
         expect(dateFilter({ _gt: '2021-01-01' }, sql.fragment`test`)).toEqual(sql.fragment`(test > ${'2021-01-01'})`);
         expect(dateFilter({ _lt: '2021-01-01' }, sql.fragment`test`)).toEqual(sql.fragment`(test < ${'2021-01-01'})`);
+        expect(dateFilter({ _gte: '2021-01-01' }, sql.fragment`test`)).toEqual(sql.fragment`(test >= ${'2021-01-01'})`);
+        expect(dateFilter({ _lte: '2021-01-01' }, sql.fragment`test`)).toEqual(sql.fragment`(test <= ${'2021-01-01'})`);
         expect(dateFilter({ _gt: '2021-01-01', _lt: '2021-01-02' }, sql.fragment`test`)).toEqual(sql.fragment`(test > ${'2021-01-01'}) AND (test < ${'2021-01-02'})`);
     });
     it("Boolean filter", () => {
@@ -58,6 +60,8 @@ describe('Filters', () => {
         expect(comparisonFilter(undefined, sql.fragment`test`)).toBeNull();
         expect(comparisonFilter(comparisonFilterType.parse({ _gt: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test > ${'1'})`);
         expect(comparisonFilter(comparisonFilterType.parse({ _lt: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test < ${'1'})`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _gte: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test >= ${'1'})`);
+        expect(comparisonFilter(comparisonFilterType.parse({ _lte: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test <= ${'1'})`);
         expect(comparisonFilter(comparisonFilterType.parse({ _neq: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test != ${'1'})`);
         expect(comparisonFilter(comparisonFilterType.parse({ _eq: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test = ${'1'})`);
         expect(comparisonFilter(comparisonFilterType.parse({ _in: ['1', '2'] }), sql.fragment`test`)).toEqual(sql.fragment`(test = ANY(${sql.array(['1', '2'], 'text')}))`);
@@ -69,6 +73,7 @@ describe('Filters', () => {
     it("String filter", () => {
         expect(stringFilter(null, sql.fragment`test`)).toBeNull();
         expect(stringFilter(undefined, sql.fragment`test`)).toBeNull();
+        expect(stringFilter(stringFilterType.parse('textString'), sql.fragment`test`)).toEqual(sql.fragment`(test = ${'textString'})`);
         expect(stringFilter(stringFilterType.parse({ _in: ['1', '2'] }), sql.fragment`test`)?.sql).toMatch(sql.fragment`(test = ANY(${sql.array(['1', '2'], 'text')}))`.sql);
         expect(stringFilter(stringFilterType.parse({ _like: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test LIKE ${'1'})`);
         expect(stringFilter(stringFilterType.parse({ _ilike: '1' }), sql.fragment`test`)).toEqual(sql.fragment`(test ILIKE ${'1'})`);
@@ -97,7 +102,6 @@ describe("Query builders", () => {
             rowsToArray(
                 sql.fragment`SELECT email, date_of_birth`,
                 sql.fragment`FROM users`,
-                'users'
             )
         }`);
         expect(result).toEqual([{

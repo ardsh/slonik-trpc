@@ -26,7 +26,7 @@ SELECT row_to_json((
     )) AS "rows"
     ${fromFragment}
 ) all_rows
-) AS ${sql.identifier([name || 'rows_to_array'])}
+) AS ${sql.identifier([name || findTableName(fromFragment) || 'rows_to_array'])}
 `;
 
 export const arrayStringFilterType = arrayifyType(z.string());
@@ -35,6 +35,8 @@ export const dateFilterType = z
     .object({
         _lt: z.string(),
         _gt: z.string(),
+        _lte: z.string(),
+        _gte: z.string(),
     })
     .partial();
 
@@ -62,6 +64,11 @@ export const genericFilter = (
     return null;
 };
 
+const findTableName = (fragment: Fragment) => {
+    const table = fragment.sql.match(/^\s*FROM\s+(\S+)/i)?.[1];
+    return table?.replace(/\W+/g, '')?.toLowerCase();
+};
+  
 export const dateFilter = (
     date: z.infer<typeof dateFilterType> | undefined | null,
     field: Fragment
@@ -72,6 +79,12 @@ export const dateFilter = (
     }
     if (date?._lt) {
         conditions.push(sql.fragment`${field} < ${date._lt}`);
+    }
+    if (date?._gte) {
+        conditions.push(sql.fragment`${field} >= ${date._gte}`);
+    }
+    if (date?._lte) {
+        conditions.push(sql.fragment`${field} <= ${date._lte}`);
     }
     if (conditions.length) {
         return sql.fragment`(${sql.join(conditions, sql.fragment`) AND (`)})`;
@@ -98,13 +111,16 @@ export const invertFilter = (condition?: Fragment | null) => {
     return null;
 };
 
+const numberString = z.union([z.number(), z.string()]);
 export const comparisonFilterType = z.object({
-    _gt: z.string().optional(),
-    _lt: z.string().optional(),
-    _eq: z.string().optional(),
-    _neq: z.string().optional(),
-    _in: arrayStringFilterType.optional(),
-    _nin: arrayStringFilterType.optional(),
+    _gt: numberString.optional(),
+    _lt: numberString.optional(),
+    _gte: numberString.optional(),
+    _lte: numberString.optional(),
+    _eq: numberString.optional(),
+    _neq: numberString.optional(),
+    _in: z.union([arrayifyType(z.number()), arrayStringFilterType]).optional(),
+    _nin: z.union([arrayifyType(z.number()), arrayStringFilterType]).optional(),
     _is_null: z.boolean().optional(),
 });
 
@@ -120,19 +136,25 @@ export const comparisonFilter = (
     if (filter?._lt) {
         conditions.push(sql.fragment`${field} < ${filter._lt}`);
     }
+    if (filter?._gte) {
+        conditions.push(sql.fragment`${field} >= ${filter._gte}`);
+    }
+    if (filter?._lte) {
+        conditions.push(sql.fragment`${field} <= ${filter._lte}`);
+    }
     if (filter?._eq) {
         conditions.push(sql.fragment`${field} = ${filter._eq}`);
     }
     if (filter?._neq) {
         conditions.push(sql.fragment`${field} != ${filter._neq}`);
     }
-    if (filter?._in?.length) {
+    if (typeof filter?._in !== 'number' && filter?._in?.length) {
         const fragment = arrayFilter(filter._in, field, type);
         if (fragment) {
             conditions.push(fragment);
         }
     }
-    if (filter?._nin?.length) {
+    if (typeof filter?._nin !== 'number'  && filter?._nin?.length) {
         const fragment = invertFilter(arrayFilter(filter._nin, field, type));
         if (fragment) {
             conditions.push(fragment);
@@ -152,7 +174,14 @@ export const comparisonFilter = (
 /**
  * Use this for string comparisons with LIKE, ILIKE, etc.
 */
-export const stringFilterType = comparisonFilterType.extend({
+export const stringFilterType = z.union([z.string(), z.object({
+    _gt: z.string().optional(),
+    _lt: z.string().optional(),
+    _eq: z.string().optional(),
+    _neq: z.string().optional(),
+    _in: arrayStringFilterType.optional(),
+    _nin: arrayStringFilterType.optional(),
+    _is_null: z.boolean().optional(),
     _ilike: z.string().optional(),
     _like: z.string().optional(),
     _nlike: z.string().optional(),
@@ -161,13 +190,16 @@ export const stringFilterType = comparisonFilterType.extend({
     _iregex: z.string().optional(),
     _nregex: z.string().optional(),
     _niregex: z.string().optional(),
-});
+})]);
 
 export const stringFilter = (
     filter: z.infer<typeof stringFilterType> | undefined | null,
     field: Fragment
 ) => {
     const conditions = [] as Fragment[];
+    if (typeof filter === 'string') {
+        return sql.fragment`(${field} = ${filter})`;
+    }
     if (filter?._ilike) {
         conditions.push(sql.fragment`${field} ILIKE ${filter._ilike}`);
     }
