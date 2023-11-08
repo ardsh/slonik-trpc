@@ -387,9 +387,6 @@ export function makeQueryLoader<
         // TODO: Add more checks for invalid queries
         console.warn("Your query includes semicolons at the end. Please refer to the documentation of slonik-trpc, and do not include semicolons in the query:\n " + query.sql);
     }
-    if (options.filters && !queryComponents.view) {
-        console.warn("Deprecation warning: Specify views with buildView instead of filters in makeQueryLoader");
-    }
     if (!fromFragment) {
         console.warn("Deprecation warning: Specify query.from and query.select separately in makeQueryLoader", query?.sql);
     }
@@ -684,7 +681,11 @@ export function makeQueryLoader<
     const getLoadArgs = <
         TFields extends string = TSelectable,
         TSort extends TSortable = TSortable,
-        TFiltersDisabled extends Exclude<keyof TFilter, number | symbol> | "AND" | "OR" | "NOT" = never,
+        TFiltersDisabled extends {
+            AND?: boolean,
+            OR?: boolean,
+            NOT?: boolean,
+        } = never,
     >(
         {
             sortableColumns = Object.keys(options?.sortableColumns || {}) as never,
@@ -695,9 +696,7 @@ export function makeQueryLoader<
             /** You can remove specific sortable columns to disallow sorting by them */
             sortableColumns?: [TSort, ...TSort[]];
             selectableColumns?: readonly [TFields, ...TFields[]];
-            disabledFilters?: {
-                [x in TFiltersDisabled]?: boolean
-            },
+            disabledFilters?: TFiltersDisabled,
             /**
              * You can enforce sorting constraints with this function.
              * E.g. ensure only certain columns are sortable, or with particular directions.
@@ -732,18 +731,18 @@ export function makeQueryLoader<
             orderUnion
         );
         type ActualFilters = [TFilterTypes] extends [never] ? never : RecursiveFilterConditions<
-            TFilter, Extract<TFiltersDisabled, "AND" | "OR" | "NOT">>;
+            TFilter, Extract<keyof TFiltersDisabled, "AND" | "OR" | "NOT">>;
 
         const filterKeys = Object.keys(options.query.view?.getFilters() || options?.filters?.filters || {})
         const filterType: any = z.lazy(() =>
             z.object({
                 ...(filterKeys.reduce((acc, key) => {
-                    acc[key] = z.any();
+                    acc[key] = options?.filters?.filters?.[key] || z.any();
                     return acc;
                 }, {} as Record<string, any>)),
-                ...(!(disabledFilters as any)?.OR && { OR: z.array(filterType) }),
-                ...(!(disabledFilters as any)?.AND && { AND: z.array(filterType) }),
-                ...(!(disabledFilters as any)?.NOT && { NOT: filterType }),
+                ...(!disabledFilters?.OR && { OR: z.array(filterType) }),
+                ...(!disabledFilters?.AND && { AND: z.array(filterType) }),
+                ...(!disabledFilters?.NOT && { NOT: filterType }),
             }).partial()
         );
 
@@ -766,7 +765,7 @@ export function makeQueryLoader<
             orderBy: options?.defaults?.orderBy ?
                 orderBy.default(options.defaults.orderBy) as never :
                 orderBy as unknown as typeof orderUnion,
-            where: filterKeys.length ? filterType as unknown as z.ZodType<ActualFilters> : z.null() as never,
+            where: filterKeys.length ? filterType as z.ZodType<ActualFilters> : z.null() as never,
         }).partial();
     };
     const self = {
