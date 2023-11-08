@@ -5,6 +5,8 @@ import {
   booleanFilter,
   comparisonFilter,
   comparisonFilterType,
+  dateFilter,
+  dateFilterType,
   genericFilter,
   stringFilter,
   stringFilterType
@@ -40,7 +42,6 @@ Example usage with filters
 
 ```ts
 buildView`FROM (SELECT users.*, COUNT(*) AS post_count FROM users LEFT JOIN posts ON posts.user_id = users.id GROUP BY users.id) users`
-  .setMainTable("users")
   .addFilters(
     usersView.getFilters({
       mainTable: "users",// Possibility to override when there's more than one table visible
@@ -70,12 +71,14 @@ Not sure which preprocessing makes more sense, probably the second one
 
 export type BuildView<
   TFilter extends Record<string, any> = Record<never, any>,
-  TFilterKey extends keyof TFilter = never
+  TFilterKey extends keyof TFilter = never,
+  TAliases extends string = "_main"
 > = {
   /**
    * Allows adding custom filters to the view
    * Multiple filters can be added at once
-   * WARNING: Do not use this unless you know what you're doing.
+   * This is mainly to be used in conjunction with getFilters
+   * WARNING: Do not use this otherwise, unless you know what you're doing.
    * Prefer using the other filter methods, especially addGenericFilter if you need more flexibility
    * @param filters - The filters to add
    */
@@ -100,7 +103,7 @@ export type BuildView<
       | null
       | undefined
       | false
-  }): BuildView<TNewFilter & TFilter, keyof TNewFilter | TFilterKey>
+  }): BuildView<TNewFilter & TFilter, keyof TNewFilter | TFilterKey, TAliases>
   /**
    * Allows filtering by string operators, e.g. "contains", "starts with", "ends with", etc.
    * @param field - The name of the filter - Can be a nested field, e.g. "user.name"
@@ -108,10 +111,15 @@ export type BuildView<
    */
   addStringFilter: <TKey extends Exclude<string, TFilterKey>>(
     field: TKey | TKey[],
-    name?: ((table: IdentifierSqlToken, value?: z.infer<typeof stringFilterType>) => SqlFragment)
+    name?: ((table: IdentifierSqlToken & {
+      [x in TAliases]: IdentifierSqlToken
+    } & {
+      [x: string]: IdentifierSqlToken
+    }, value?: z.infer<typeof stringFilterType>, allFilters?: any, ctx?: any) => SqlFragment)
   ) => BuildView<
     TFilter & { [x in TKey]?: z.infer<typeof stringFilterType> },
-    keyof TFilter | TKey
+    keyof TFilter | TKey,
+    TAliases
   >
   /**
    * Allows filtering by comparison operators, e.g. "greater than", "less than", "between", "in", etc.
@@ -122,20 +130,49 @@ export type BuildView<
   addComparisonFilter: <TKey extends Exclude<string, TFilterKey>>(
     // Not adding allFilters + context in the interface until the API becomes more stable
     name: TKey | TKey[],
-    mapper?: ((table: IdentifierSqlToken, value?: z.infer<typeof comparisonFilterType>) => SqlFragment)
+    mapper?: ((table: IdentifierSqlToken & {
+      [x in TAliases]: IdentifierSqlToken
+    } & {
+      [x: string]: IdentifierSqlToken
+    }, value?: z.infer<typeof comparisonFilterType>, allFilters?: any, ctx?: any) => SqlFragment)
   ) => BuildView<
     TFilter & { [x in TKey]?: z.infer<typeof comparisonFilterType> },
-    keyof TFilter | TKey
+    keyof TFilter | TKey,
+    TAliases
+  >
+  /**
+   * Allows filtering by date operators, e.g. "greater than", "less than" etc.
+   * */
+  addDateFilter: <TKey extends Exclude<string, TFilterKey>>(
+    name: TKey | TKey[],
+    mapper?: ((table: IdentifierSqlToken & {
+      [x in TAliases]: IdentifierSqlToken
+    } & {
+      [x: string]: IdentifierSqlToken
+    }, value?: z.infer<typeof dateFilterType>, allFilters?: any, ctx?: any) => SqlFragment)
+  ) => BuildView<
+    TFilter & { [x in TKey]?: z.infer<typeof dateFilterType> },
+    keyof TFilter | TKey,
+    TAliases
   >
   /**
    * Allows preprocessing the filters before they are interpreted
   */
-  setFilterPreprocess: (preprocess: ((filters: TFilter, context: any) => Promise<TFilter> | TFilter)) => BuildView<TFilter, TFilterKey>
+  setFilterPreprocess: (preprocess: ((filters: TFilter, context: any) => Promise<TFilter> | TFilter)) => BuildView<TFilter, TFilterKey, TAliases>
   /**
-   * Sets the main table of the view
-   * By default this is the first table in the FROM clause
-   **/
-  setMainTable: (table: string) => BuildView<TFilter, TFilterKey>
+   * Sets table aliases. By default there's a `_main` alias for the main table that's referenced in the FROM fragment.
+   * 
+   * These aliases can then be used in some of the filters, e.g.
+   * ```ts
+   * buildView`FROM users`
+   * .addStringFilter('name', (table) => sql.fragment`COALESCE(${table._main}.first_name, ${table._main}.last_name)`)
+   * ```
+   * 
+   * would be translated to `COALESCE(users.first_name, users.last_name)`
+   * 
+   * because `users` is the main table that's referred in the FROM clause.
+   * */
+  setTableAliases: <TNewAliases extends string>(table: Record<TNewAliases, string | IdentifierSqlToken>) => BuildView<TFilter, TFilterKey, TAliases | TNewAliases>
   /**
    * Allows filtering by boolean operators, e.g. "is true", "is false", "is null", etc.
    * @param field - The name of the filter - Can be a nested field, e.g. "user.name"
@@ -144,16 +181,24 @@ export type BuildView<
    */
   addBooleanFilter: <TKey extends Exclude<string, TFilterKey>>(
     name: TKey | TKey[],
-    mapper?: ((table: IdentifierSqlToken, value?: boolean) => SqlFragment)
-  ) => BuildView<TFilter & { [x in TKey]?: boolean }, keyof TFilter | TKey>
+    mapper?: ((table: IdentifierSqlToken & {
+      [x in TAliases]: IdentifierSqlToken
+    } & {
+      [x: string]: IdentifierSqlToken
+    }, value?: boolean) => SqlFragment)
+  ) => BuildView<TFilter & { [x in TKey]?: boolean }, keyof TFilter | TKey, TAliases>
   /**
    * Allows filtering by single or multiple string values
    * And returns all rows where the value is in the array
    * */
   addInArrayFilter: <TKey extends Exclude<string, TFilterKey>>(
     name: TKey | TKey[],
-    mapper?: ((table: IdentifierSqlToken, value?: string | string[] | null) => SqlFragment)
-  ) => BuildView<TFilter & { [x in TKey]?: string | string[] | null }, keyof TFilter | TKey>
+    mapper?: ((table: IdentifierSqlToken & {
+      [x in TAliases]: IdentifierSqlToken
+    } & {
+      [x: string]: IdentifierSqlToken
+    }, value?: string | string[] | null) => SqlFragment)
+  ) => BuildView<TFilter & { [x in TKey]?: string | string[] | null }, keyof TFilter | TKey, TAliases>
   /**
    * Use this to add a generic filter, that returns a SQL fragment
    * This filter won't be applied if the value is null or undefined
@@ -170,7 +215,7 @@ export type BuildView<
       | null
       | undefined
       | false
-  ) => BuildView<TFilter & { [x in TKey]?: TNewFilter }, keyof TFilter | TKey>
+  ) => BuildView<TFilter & { [x in TKey]?: TNewFilter }, keyof TFilter | TKey, TAliases>
   /**
    * Returns the SQL query
    * @param args - The arguments to filter by
@@ -228,23 +273,31 @@ export type BuildView<
   }
 } & SqlFragment
 
+
 export const buildView = (
   parts: readonly string[],
   ...values: readonly ValueExpression[]
 ) => {
   const fromFragment = sql.fragment(parts, ...values)
-  if (!fromFragment?.sql?.match(/^\s*FROM/i)) {
+  if (!fromFragment.sql.match(/^\s*FROM/i)) {
     throw new Error('First part of view must be FROM')
   }
   const preprocessors = [] as ((filters: any, context: any) => Promise<any> | any)[];
   const config = {
-    table: fromFragment.sql.match(/^FROM\s*(\w+)/i)?.[1]
+    table: fromFragment.sql.match(/^FROM\s*(\w+)/i)?.[1],
+    aliases: new Map<string, string>(),
   };
+  const identifierProxy = new Proxy({} as any, {
+    get(target, property) {
+      if (property === '_main') return sql.identifier([config.aliases.get(property) || config.table || '']);
+      return sql.identifier([config.aliases.get(property as string) || property as string]);
+    }
+  });
   if (!config.table) {
     config.table = fromFragment.sql.match(/(AS|\))\s+(\w+)\s*$/i)?.[2]
   }
   if (!config.table) {
-    console.warn(`Could not determine table name for ${fromFragment.sql}. Please use setMainTable() to set the table name manually.`);
+    console.warn(`Could not determine table name for ${fromFragment.sql}. Please use setAliases({ _main: 'tableName' }) to set the table name manually.`);
   }
   const interpreters = {} as Interpretors<Record<string, any>>
 
@@ -274,7 +327,7 @@ export const buildView = (
     return fromFragment;
   }
 
-  const addFilter = (interpreter: (value: any, field: FragmentSqlToken) => any, fields: string | string[], mapper?: ((table: IdentifierSqlToken, value?: any, allFilters?: any, context?: any) => SqlFragment)) => {
+  const addFilter = (interpreter: (value: any, field: FragmentSqlToken) => any, fields: string | string[], mapper?: ((table: IdentifierSqlToken | Record<string, IdentifierSqlToken>, value?: any, allFilters?: any, context?: any) => SqlFragment)) => {
     if (mapper && Array.isArray(fields) && fields.length > 1) {
       throw new Error('If you specify a mapper function you cannot have multiple filter keys');
     }
@@ -289,7 +342,7 @@ export const buildView = (
           }
           const identifier = mapper ?
             // Try to get the table name from the 2nd to last prefix if it exists, if not then use main table
-            mapper(sql.identifier([keys[keys.length - 2] || config.table || '']), value, allFilters, ctx) :
+            mapper(identifierProxy, value, allFilters, ctx) :
               config.table && keys.length <= 1 ?
                 (sql.identifier([config.table, ...keys.slice(-1)]) as any) :
                 (sql.identifier([...keys.slice(-2)]) as any)
@@ -308,8 +361,10 @@ export const buildView = (
       Object.assign(interpreters, filters)
       return self
     },
-    setMainTable(newTable: string) {
-      config.table = newTable;
+    setTableAliases(newAliases: Record<string, string | IdentifierSqlToken>) {
+      for (const [key, value] of Object.entries(newAliases)) {
+        config.aliases.set(key, value as string);
+      }
       return self;
     },
     setFilterPreprocess(preprocess: ((filters: any, context: any) => Promise<any> | any)) {
@@ -347,6 +402,9 @@ export const buildView = (
     },
     addBooleanFilter: (keys: string | string[], name?: any) => {
       return addFilter(booleanFilter, keys, name);
+    },
+    addDateFilter: (keys: string | string[], name?: any) => {
+      return addFilter(dateFilter, keys, name);
     },
     addInArrayFilter: (keys: string | string[], name?: any) => {
       return addFilter(arrayFilter, keys, name);

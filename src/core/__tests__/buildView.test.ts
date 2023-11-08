@@ -1,9 +1,13 @@
 import { sql } from 'slonik'
 import { makeQueryTester } from './makeQueryTester';
-import { buildView } from '../buildView'
+import { buildView } from '../../index'
 import { makeQueryLoader } from '../makeQueryLoader';
 
 const { db } = makeQueryTester('buildView')
+
+it('Throws an error if view doesn\'t start with from', async () => {
+  expect(() => buildView`SELECT * FROM users`).toThrow("First part of view must be FROM");
+});
 
 it('Allows building a view from a string', async () => {
   const usersView = buildView`FROM users`
@@ -12,7 +16,7 @@ it('Allows building a view from a string', async () => {
       name: (value: string) => sql.fragment`first_name = ${value}`
     })
     .addStringFilter('users.last_name')
-    .addBooleanFilter('long_email', (table) => sql.fragment`LENGTH(${table}.email) > 10`)
+    .addBooleanFilter('long_email', (table) => sql.fragment`LENGTH(${table._main}.email) > 10`)
 
   const compositeView = buildView`FROM users
     LEFT JOIN test_table_bar ON test_table_bar.uid = users.id`.addFilters(
@@ -108,8 +112,8 @@ it("Allows specifying views in query loader", async () => {
 it("Allows specifying composite tables", async () => {
   const userView = buildView`FROM users LEFT JOIN posts
   ON posts.user_id = users.id`
-  .addStringFilter(['users.email', 'users.first_name', 'posts.text', 'users.last_name', 'posts.title'])
-  .setMainTable('users')
+  .addStringFilter(['users.email', 'users.first_name', 'posts.text', 'users.last_name'])
+  .addStringFilter('posts.title', ({ posts }) => sql.fragment`${posts}.title`)
 
   const query = await userView.getWhereFragment({
     where: {
@@ -120,7 +124,7 @@ it("Allows specifying composite tables", async () => {
   });
   expect(query.sql).toContain(`"users"."last_name" = `);
   expect(query.sql).toContain(`"users"."email" = `);
-  expect(query.sql).toContain(`"posts"."title" = `);
+  expect(query.sql).toContain(`"posts".title = `);
 
   const compositeView = buildView`FROM (SELECT users.*, COUNT(posts.*)
     FROM users LEFT JOIN posts
@@ -131,6 +135,9 @@ it("Allows specifying composite tables", async () => {
     })
   )
   .addComparisonFilter('combined.count')
+  .setFilterPreprocess(() => {
+    return null as any;
+  })
   const composite = await compositeView.getWhereFragment({
     where: {
       OR: [{
@@ -145,27 +152,31 @@ it("Allows specifying composite tables", async () => {
   expect(composite.sql).toContain(`"combined"."count" > `);
   expect(composite.sql).toContain(`"combined"."last_name" = `);
 
-  const filters = compositeView.getFilters();
+  const filters = compositeView.getFilters({
+    exclude: ['combined.users.last_name'],
+    include: ['combined.users.email', 'combined.users.first_name', 'combined.count'],
+  });
   expect(filters).toEqual({
     'combined.count': expect.anything(),
     'combined.users.email': expect.anything(),
     'combined.users.first_name': expect.anything(),
-    'combined.users.last_name': expect.anything(),
   });
 });
 
 describe("Filters", () => {
   const userView = buildView`FROM users LEFT JOIN posts
     ON posts.user_id = users.id`
+    .setTableAliases({
+      users: 'users',
+    })
     .addStringFilter(['users.email', 'users.first_name', 'users.last_name', 'posts.title'])
     .addGenericFilter('ID', (value: string) => sql.fragment`users.id = ${value}`)
-    .addInArrayFilter('users.id')
+    .addInArrayFilter('users.id', (table) => sql.fragment`${table.users}.id`)
     .addStringFilter(['users.name', 'users.profession'])
-    .addComparisonFilter('usersID', (table, value) => sql.fragment`${table}.id`)
-    .addComparisonFilter('postsCount', (table) => sql.fragment`${table}."authoredPosts"`)
-    .addComparisonFilter('users.created_at')
-    .addBooleanFilter('isGmail', (table) => sql.fragment`${table}.email ILIKE '%gmail.com'`)
-    .setMainTable('users')
+    .addComparisonFilter('usersID', (table, value) => sql.fragment`${table.users}.id`)
+    .addComparisonFilter('postsCount', ({ users }) => sql.fragment`${users}."authoredPosts"`)
+    .addDateFilter('users.created_at')
+    .addBooleanFilter('isGmail', (table) => sql.fragment`${table.users}.email ILIKE '%gmail.com'`)
 
   it("Allows specifying generic filters", async () => {
     const query = await userView.getWhereFragment({
@@ -197,8 +208,8 @@ describe("Filters", () => {
         }]
       }
     });
-    expect(query.sql).toContain(`"users"."id" = ANY(`);
-    expect(query.sql).toContain(`users.id = `);
+    expect(query.sql).toContain(`"users".id = ANY(`);
+    expect(query.sql).toContain(`users.id = $`);
     expect(query.sql).toContain(`) OR (`);
   });
   it("Allows specifying comparison filters", async () => {

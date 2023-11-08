@@ -136,56 +136,31 @@ This returns a relay-like pagination result, with `nodes` and `pageInfo` keys.
 
 ### Filtering
 
-You can add any filter to the API, by specifying the filter type, and the interpreter function that converts the filter input to a SQL fragment, in a declarative way.
+You can add any filter to the API, by specifying the filter type, and the optional interpreter function that converts the filter input to a SQL fragment, in a declarative way.
 
 Here's an example:
 
 ```ts
-import { createFilters, booleanFilter, arrayFilter, dateFilter, genericFilter } from 'slonik-trpc/utils';
-
-const filters = createFilters<Context>()({
-    // Specify the filter input types with zod types
-    ids: z.union([z.string(), z.array(z.string())]),
-    createdDate: z.object({
-        _gt: z.string(),
-        _lt: z.string(),
-    }),
-    // Whether the user has more than N posts
-    postsCount: z.number(),
-    name: z.string(),
-    isGmail: z.boolean(),
-    // Then the interpreter functions for each filter
-}, {
-    name: (value) => sql.fragment`name=${value}`,
-    // If isGmail: true, return emails that end in gmail.com. If isGmail: false, return only non-gmail emails.
-    isGmail: (value) => booleanFilter(value, sql.fragment`email ILIKE '%gmail.com'`),
-    // Returns only ids in the array, if any elements are specified.
-    ids: (value) => arrayFilter(value, sql.fragment`users.id`),
-    // Using the previously declared sub-query
-    postsCount: value => genericFilter(value, sql.fragment`"authoredPosts" > ${value}`),
-    createdDate: (value) => dateFilter(value, sql.fragment`users.created_at`),
-})
-
-const loader = makeQueryLoader({
-    db,
-    query,
-    filters,
-});
+buildView`FROM users`
+    .addInArrayFilter('id')
+    .addStringFilter(['users.name', 'users.profession'])
+    .addComparisonFilter('postsCount', () => sql.fragment`users."authoredPosts"`)
+    .addDateFilter('createdDate', () => sql.fragment`users.created_at`)
+    .addBooleanFilter('isGmail', () => sql.fragment`users.email ILIKE '%gmail.com'`)
 ```
 
-As you can see, the filter creation is very easy, yet it offers very powerful, flexible and type-safe filters, giving you complete control over the resulting API that is created.
-
-`arrayFilter`, `dateFilter`, and `booleanFilter` are small utilities that can be used to build sql fragments for common filters. You can look at [their implementation](https://github.com/ardsh/slonik-trpc/blob/main/src/helpers/sqlUtils.ts) if you wanna try creating your own.
-
-`AND`, `OR` and `NOT` are the only filters are added automatically, to allow more complex combinations.
+`AND`, `OR` and `NOT` filters are added automatically, to allow more complex combinations.
 
 ```ts
 const specificUsers = await filtersLoader.load({
     where: {
         // users created between yesterday and now
         createdDate: {
-            _lt: new Date().toISOString(),
-            _gt: new Date(Date.now() - 1000 * 3600 * 24).toISOString(),
+            _lte: new Date().toISOString(),
+            _gte: new Date(Date.now() - 1000 * 3600 * 24).toISOString(),
+        },
+        "users.profession": {
+            _ilike: '%engineer%',
         },
         OR: [{
             // Returns users with these specific ids
@@ -196,46 +171,27 @@ const specificUsers = await filtersLoader.load({
         }, {
             // Or with less than 20 posts (by inverting the postsCount greater than filter)
             NOT: {
-                postsCount: 20,
+                postsCount: {
+                    _gte: 20,
+                },
             }
         }]
     }
 });
 ```
 
-However, these too can be disabled (when calling `getLoadArgs`), and it is recommended to do so for the `OR` filter, which is often computationally expensive and shouldn't be allowed on a public API.
-
-### Declaring filters through View Relations
-
-An easier way to declare and reuse the above filters is by using `buildView`
+The `AND`, `OR`, and `NOT` can be disabled when calling `getLoadArgs`, and it is recommended to do so for the `OR` filter, which is often computationally expensive and shouldn't be allowed on a public API.
 
 ```ts
-buildView`FROM users`
-    .addInArrayFilter('users.id')
-    .addStringFilter(['users.name', 'users.profession'])
-    .addComparisonFilter('postsCount', (table) => sql.fragment`${table}."authoredPosts"`)
-    .addComparisonFilter('users.created_at')
-    .addGenericFilter('ID', (value: string) => sql.fragment`users.id = ${value}`)
-    .addBooleanFilter('isGmail', (table) => sql.fragment`${table}.email ILIKE '%gmail.com'`)
+loader.getLoadArgs({
+    disabledFilters: {
+        // OR filters should be disabled on a public API
+        OR: true,
+    }
+})
 ```
 
-This is the equivalent of the above. It allows an extensive filtering API through those helper functions like `addStringFilter` and `addInArrayFilter`
-
-```ts
-where: {
-    ID: 'abc',
-    isGmail: true,
-    postsCount: {
-        _gte: 30,
-    },
-    "users.profession": {
-        _ilike: '%engineer%',
-    },
-    "users.created_at": {
-        _lt: '2020-01-01',
-    },
-}
-```
+The `addGenericFilter` method offers more freedom, by letting you specify any valid SQL fragment in response to a value. The filter is then applied for any non-null value.
 
 ### Authorization
 
@@ -352,17 +308,12 @@ const groupedLoader = makeQueryLoader({
             count: z.number(),
             name: z.string(),
         }))`SELECT COUNT(*), users.name`,
-        from: sql.fragment`FROM posts
+        view: buildView`FROM posts
             LEFT JOIN users
-                ON posts.author = users.id`,
+                ON posts.author = users.id`
+            .addInArrayFilter('posts.category'),
         groupBy: sql.fragment`users.name`,
     },
-    filters: createFilters<Context>()({
-        categories: z.union([z.string(), z.array(z.string())]),
-    }, {
-        // Filter based on posts category.
-        categories: (value) => arrayFilter(value, sql.fragment`posts.category`),
-    }),
 });
 ```
 
@@ -371,7 +322,7 @@ Now you can easily filter authors by their posts, and still get the posts count.
 ```ts
 const bigPostsCount = await sortableLoader.load({
     where: {
-        categories: ["typescript"]
+        'posts.category': ["typescript"]
     },
 });
 // Returns counts of typescript posts for each user.
