@@ -111,11 +111,11 @@ export type BuildView<
    */
   addStringFilter: <TKey extends Exclude<string, TFilterKey>>(
     field: TKey | TKey[],
-    name?: ((table: IdentifierSqlToken & {
+    name?: ((table: {
       [x in TAliases]: IdentifierSqlToken
     } & {
       [x: string]: IdentifierSqlToken
-    }, value?: z.infer<typeof stringFilterType>, allFilters?: any, ctx?: any) => SqlFragment)
+    }, value?: z.infer<typeof stringFilterType>, allFilters?: TFilter, ctx?: any) => SqlFragment)
   ) => BuildView<
     TFilter & { [x in TKey]?: z.infer<typeof stringFilterType> },
     keyof TFilter | TKey,
@@ -130,11 +130,11 @@ export type BuildView<
   addComparisonFilter: <TKey extends Exclude<string, TFilterKey>>(
     // Not adding allFilters + context in the interface until the API becomes more stable
     name: TKey | TKey[],
-    mapper?: ((table: IdentifierSqlToken & {
+    mapper?: ((table: {
       [x in TAliases]: IdentifierSqlToken
     } & {
       [x: string]: IdentifierSqlToken
-    }, value?: z.infer<typeof comparisonFilterType>, allFilters?: any, ctx?: any) => SqlFragment)
+    }, value?: z.infer<typeof comparisonFilterType>, allFilters?: TFilter, ctx?: any) => SqlFragment)
   ) => BuildView<
     TFilter & { [x in TKey]?: z.infer<typeof comparisonFilterType> },
     keyof TFilter | TKey,
@@ -145,11 +145,11 @@ export type BuildView<
    * */
   addDateFilter: <TKey extends Exclude<string, TFilterKey>>(
     name: TKey | TKey[],
-    mapper?: ((table: IdentifierSqlToken & {
+    mapper?: ((table: {
       [x in TAliases]: IdentifierSqlToken
     } & {
       [x: string]: IdentifierSqlToken
-    }, value?: z.infer<typeof dateFilterType>, allFilters?: any, ctx?: any) => SqlFragment)
+    }, value?: z.infer<typeof dateFilterType>, allFilters?: TFilter, ctx?: any) => SqlFragment)
   ) => BuildView<
     TFilter & { [x in TKey]?: z.infer<typeof dateFilterType> },
     keyof TFilter | TKey,
@@ -181,11 +181,11 @@ export type BuildView<
    */
   addBooleanFilter: <TKey extends Exclude<string, TFilterKey>>(
     name: TKey | TKey[],
-    mapper?: ((table: IdentifierSqlToken & {
+    mapper?: ((table: {
       [x in TAliases]: IdentifierSqlToken
     } & {
       [x: string]: IdentifierSqlToken
-    }, value?: boolean) => SqlFragment)
+    }, value?: boolean, allFilters?: TFilter, ctx?: any) => SqlFragment)
   ) => BuildView<TFilter & { [x in TKey]?: boolean }, keyof TFilter | TKey, TAliases>
   /**
    * Allows filtering by single or multiple string values
@@ -193,11 +193,11 @@ export type BuildView<
    * */
   addInArrayFilter: <TKey extends Exclude<string, TFilterKey>>(
     name: TKey | TKey[],
-    mapper?: ((table: IdentifierSqlToken & {
+    mapper?: ((table: {
       [x in TAliases]: IdentifierSqlToken
     } & {
       [x: string]: IdentifierSqlToken
-    }, value?: string | string[] | null) => SqlFragment)
+    }, value?: string | string[] | null, allFilters?: TFilter, ctx?: any) => SqlFragment)
   ) => BuildView<TFilter & { [x in TKey]?: string | string[] | null }, keyof TFilter | TKey, TAliases>
   /**
    * Use this to add a generic filter, that returns a SQL fragment
