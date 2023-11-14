@@ -59,7 +59,7 @@ it('Allows building a view from a string', async () => {
 
 it("Doesn't allow arrays with custom filters", async () => {
   expect(() => buildView`FROM users`
-    .addBooleanFilter(['long_email', 'something_else'], (table) => sql.fragment`LENGTH(${table}.email) > 10`)
+    .addBooleanFilter(['long_email', 'something_else'], (table) => sql.fragment`LENGTH(${table._main}.email) > 10`)
   ).toThrow("If you specify a mapper function you cannot have multiple filter keys");
 });
 it("Allows specifying multiple keys", async () => {
