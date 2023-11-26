@@ -13,8 +13,7 @@ You can look at the [minimal-example playground](https://stackblitz.com/github/a
 Create a file at `src/postsLoader.ts`:
 
 ```ts title="postsLoader.ts"
-import { makeQueryLoader } from 'slonik-trpc';
-import { sql } from 'slonik';
+import { makeQueryLoader, buildView, sql } from 'slonik-trpc';
 
 const postsQuery = {
     select: sql.type(z.object({
@@ -27,7 +26,7 @@ const postsQuery = {
         users.first_name || ' ' || users.last_name AS author,
         posts.title,
         posts.date`,
-    from: sql.fragment`FROM posts
+    view: buildView`FROM posts
     LEFT JOIN users
         ON users.id = posts.author_id`
 };

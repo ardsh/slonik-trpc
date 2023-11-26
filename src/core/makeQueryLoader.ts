@@ -823,11 +823,7 @@ export function makeQueryLoader<
                 }
             }
             const load = () => db.any(finalQuery).then(async rows => {
-                return mapTransformRows(reverse ? (rows as any).reverse() as never : rows, {
-                    // Backwards compatible with ctx
-                    ...args.ctx,
-                    ...args,
-                });
+                return mapTransformRows(reverse ? (rows as any).reverse() as never : rows, args);
             }).then(async rows => {
                 // Call the onLoadDone method of each plugin
                 for (const onLoadDone of afterCalls) {

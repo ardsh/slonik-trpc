@@ -1,5 +1,4 @@
-import { makeQueryLoader, InferPayload, InferArgs } from '../../index';
-import { sql } from 'slonik';
+import { sql, makeQueryLoader, InferPayload, InferArgs } from '../../index';
 import { z } from 'zod';
 import { makeQueryTester } from './makeQueryTester';
 
