@@ -92,17 +92,19 @@ export const dateFilter = (
     return null;
 };
 
-export const arrayFilter = (
+export const arrayDynamicFilter = (type = 'text') => (
     filter: string[] | number[] | string | number | undefined | null,
     field: Fragment,
-    type = 'text'
+    typeOverride?: string
 ) => {
     if (!Array.isArray(filter)) filter = [filter].filter(notEmpty) as string[];
     if (filter?.length) {
-        return sql.fragment`${field} = ANY(${sql.array(filter, type)})`;
+        return sql.fragment`${field} = ANY(${sql.array(filter, typeOverride || type)})`;
     }
     return null;
 };
+
+export const arrayFilter = arrayDynamicFilter();
 
 export const invertFilter = (condition?: Fragment | null) => {
     if (condition) {

@@ -4,114 +4,106 @@ sidebar_position: 7
 
 # Filtering
 
-Filtering in slonik-trpc allows you to specify which data you want to receive from the database. Once you declare the filters, complex combinations using AND, OR and NOT will be available automatically.
+When building views, you have the possibility to declare filters.
 
-### Simple filter
+The `buildView` function includes several easy-to-add filter types.
 
-Here is an example of how to build a simple filter:
 
-```ts
-createFilter<Context>()({
-    id: z.string(),
-}, {
-    id: (value) => sql.fragment`users.id = ${value}`
-});
-```
-
-This filter will accept a string as an `id`, and add a condition to the main query.
-So passing the following `where` object:
+## Contained in array filter
 
 ```ts
-where: {
-    id: 5
-}
+const userView = buildView`FROM users`
+    .addInArrayFilter('id', () => sql.fragment`users.view`, 'numeric')
 ```
 
-Will result in a condition like
+This is a simple way to add a filter that accepts both an array, and a single value, of a specific field. The 2nd argument specifies the column we want to compare against (and it can be any kind of SQL fragment, e.g. a `COALESCE` function call, not just a single column).
 
-```sql
-WHERE users.id = 5
-```
-
-Since we're using zod, it's not possible to pass anything but a string in that filter.
-
-Suppose we want to query multiple users though. The API builder automatically adds `AND`, `OR` and `NOT` clauses, so this is possible
+The above allows you to filter with the `where` API like below:
 
 ```ts
 where: {
     OR: [{
-        id: 5,
+        id: [3, 4, 5]
     }, {
-        id: 6
+        NOT: {
+            id: 6
+        }
     }]
 }
 ```
 
-In SQL it will correspond to this condition (though you don't have to worry about that)
+`OR`, `AND`, and `NOT` filters are added automatically, but they can be removed.
 
-```sql
-WHERE ((users.id = 5) OR (users.id = 6))
-```
-
-### Filtering with arrays of id
-
-To make it easier to query multiple IDs at once, you can use the `arrayFilter` utility function. Here is an example of how to use it:
-
-```ts
-createFilter<Context>()({
-    ids: z.array(z.string()),
-}, {
-    ids: (values) => sql.fragment`users.id = ANY(${sql.array(values, 'text')})`
-});
-```
-
-Using the `arrayFilter` utility for this kind of filter makes it easier to declare. For example:
-
-```ts
-createFilter<Context>()({
-    ids: arrayStringFilterType,
-}, {
-    ids: (values) => arrayFilter(values, sql.fragment`users.id`)
-});
-```
-
-Then, to use the filter, you can pass an `ids` array to the `where` object:
-
-```ts
-where: {
-    ids: [3, 4, 5]
-}
-```
 
 This will produce an SQL condition like the following:
 
 ```sql
-WHERE users.id = ANY([3,4,5]::text[])
+WHERE users.id = ANY([3,4,5]::numeric[])
+OR (
+  NOT(
+    users.id = ANY([6]::numeric[])
+  )
+)
 ```
 
-### Using the booleanFilter utility
+## String comparisons filter
 
-The `booleanFilter` utility takes in a fragment and applies it if the input is true. It applies the reverse if the input is `false`, and doesn't apply anything if the input is `null`/`undefined`.
+If you don't need to specify complex columns with SQL fragments, you can use the `tableName.column` to more easily create multiple filters. For string comparisons specifically, you'll be able to use filters like `_ilike`, `_iregex` etc.
 
 ```ts
-const filters = createFilters()({
-    isGmail: z.boolean(),
-}, {
-    isGmail: (value) => booleanFilter(value, `users.email ILIKE '%gmail.com'`),
-});
+userView.addStringFilter(['users.name', 'users.profession'])
+```
+
+This allows both the `name` and `profession` columns to be filterable with string operators.
+```ts
+where: {
+    "users.name": {
+        _ilike: 'John',
+    },
+    "users.profession": {
+        _iregex: 'programmer',
+    },
+}
+```
+
+### Comparison filters
+
+```ts
+userView.addComparisonFilter('postsCount', () => sql.fragment`(
+    SELECT COUNT(*) FROM posts
+    WHERE posts.author_id = users.id
+)`)
+```
+
+This allows you to filter by the number of posts a user has. The above will allow you to filter with the `where` API like below:
+
+```ts
+where: {
+    postsCount: {
+        _gte: 5,
+    },
+}
+```
+
+In actuality you'll want to avoid complex SQL fragments like the above, for performance reasons, and instead use a view that already has the `postsCount` column, but this is just an example.
+
+### Boolean filters
+
+The `addBooleanFilter` utility takes in a fragment and applies it if the input is true. It applies the reverse if the input is `false`, and doesn't apply anything if the input is `null`/`undefined`.
+
+```ts
+userView.addBooleanFilter('isGmail', () => sql.fragment`users.email ILIKE '%gmail.com'`)
 ```
 
 To use the filter, you can pass an `isGmail` value to the `where` object:
 
 ```ts
-const nonGmailUsers = await filtersLoader.load({
-    where: {
-        isGmail: false,
-    }
-});
+where: {
+    isGmail: false,
+}
 ```
 
-This will return only users that have their email ending in gmail.com.
+This will return only users that don't have their email ending in gmail.com, because we specified `false`.
 
 The equivalent SQL would be
 
@@ -119,73 +111,100 @@ The equivalent SQL would be
 WHERE NOT(email ILIKE '%gmail.com')
 ```
 
-### Merging filters
+## Generic filters
 
-A good method of organization might be to declare filters based on the tables they access, e.g. `users` filters, `posts` filters, etc., then merge them at the end.
-
+If you need more flexibility, you can use `addGenericFilter`
 
 ```ts
-const userFilters = createFilters()({
-    isGmail: z.boolean(),
-    userIds: arrayStringFilterType,
-}, {
-    userIds: (values) => arrayFilter(values, sql.fragment`users.id`),
-    isGmail: (value) => booleanFilter(value, `users.email ILIKE '%gmail.com'`),
-});
-
-const postFilters = createFilters()({
-    postIds: arrayStringFilterType,
-    longPost: z.boolean(),
-}, {
-    postIds: (values) => arrayFilter(values, sql.fragment`posts.id`),
-    longPost: (value) => booleanFilter(value, sql.fragment`LENGTH(posts.content) > 500`),
-});
-
-// merge filters
-const filters = mergeFilters([userFilters, postFilters]);
+const userView = buildView`FROM users`
+    .addGenericFilter('ID', (value: string) => sql.fragment`users.id = ${value}`)
 ```
 
-Now, the filters object has all the filters that are declared in the userFilters and postFilters objects. You can use the filters object in the makeQueryLoader function:
+This allows you to filter with the `where` API like below:
 
 ```ts
-import { mergeFilters } from 'slonik-trpc/utils';
-
-const postsLoader = makeQueryLoader({
-    db,
-    query: {
-        select: sql.type(zodType)`SELECT posts.*, users.first_name, users.last_name`,
-        from: sql.fragment`FROM posts LEFT JOIN users ON users.id = posts.author_id`,
-    },
-    filters,
-})
+where: {
+    ID: '123',
+}
 ```
 
-To use the filters, pass the where object to the load() function:
+You can also declare more limited versions of the above filters, via `addGenericFilter`:
 
 ```ts
-const posts = await postsLoader.load({
-  where: {
+const userView = buildView`FROM users`
+    .addGenericFilter('name_contains', (value: string) => sql.fragment`users.name ILIKE ${'%' + value + '%'}`)
+    .addGenericFilter('postsCount_gt', (value: number) => sql.fragment`(
+        SELECT COUNT(*) FROM posts
+        WHERE posts.author_id = users.id
+    ) > ${value}`)
+```
+
+:::tip
+The 2nd argument is an interpret function that accepts the value of that specific filter, the values of all the filters (`where` paramter), and the context (`ctx` parameter).
+It should return a SQL fragment.
+:::
+
+If you want you can create your own helpers, for reusability:
+
+```ts
+
+const containsFilter = (name: SqlIdentifierToken) => (value: string) => sql.fragment`${name} ILIKE ${'%' + value + '%'}`
+
+const userView = buildView`FROM users`
+    .addGenericFilter('name_contains', containsFilter(sql.identifier`users.name`))
+    .addGenericFilter('profession_contains', containsFilter(sql.identifier`users.profession`))
+```
+
+## Merging filters
+
+A good method of organizing filters is to declare them with basic views, for each table, and then reuse them as necessary for more complex views.
+
+```ts
+const postView = buildView`FROM posts`
+    .addStringFilter(['posts.title', 'posts.content'])
+    .addBooleanFilter('longPost', () => sql.fragment`LENGTH(posts.content) > 500`)
+const userView = buildView`FROM users`
+    .addStringFilter(['users.first_name', 'users.last_name'])
+    .addBooleanFilter('isGmail', () => sql.fragment`users.email ILIKE '%gmail.com'`)
+```
+
+If we have a view that joins the `posts` and `users` tables, we can reuse the filters from the `postView` and `userView`:
+
+```ts
+const combinedView = buildView`FROM posts
+    LEFT JOIN users ON users.id = posts.author_id`
+    .addFilters(postView.getFilters({
+      table: 'posts'
+    }))
+    .addFilters(userView.getFilters({
+      table: 'users'
+    }))
+```
+
+Now you'll be able to filter by `posts.title`, `posts.content`, `posts.longPost`, `users.first_name`, `users.last_name`, and `users.isGmail` in the combined view.
+
+```ts
+where: {
     OR: [{
-      userIds: [1, 2, 3],
+        "posts.title": {
+            _ilike: 'John%',
+        },
     }, {
-      longPost: true,
+        "users.isGmail": false,
     }]
-  }
-});
+}
 ```
+
+Note that `isGmail` is automatically prefixed with `users`, and `longPost` with `posts`.
 
 This will produce an SQL query like the following:
 
 ```sql
 SELECT *
 FROM posts
-LEFT JOIN users ON users.id = posts.user_id
-WHERE (users.id = ANY([1,2,3]::text[]) OR LENGTH(posts.content) > 500)
+LEFT JOIN users ON users.id = posts.author_id
+WHERE ("posts"."title" ILIKE 'John%' OR NOT(users.email ILIKE '%gmail.com'))
 ```
-
-:::tip
-The mergeFilters function helps with type safety, just like createFilters. They're not necessary if you specify the filters directly as options in the makeQueryLoader options, but that doesn't allow easy reusability.
-:::
 
 ## Usage with tRPC
 

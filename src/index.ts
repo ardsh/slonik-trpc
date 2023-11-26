@@ -12,3 +12,5 @@ export const createOptions: ReturnFirstArgument<typeof makeQueryLoader> = ((opti
 export type { Plugin } from './core/plugins/types';
 
 export { buildView } from './core/buildView';
+
+export { sql } from 'slonik';

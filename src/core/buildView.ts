@@ -1,6 +1,7 @@
 import { sql, ValueExpression, SqlFragment, IdentifierSqlToken, FragmentSqlToken } from 'slonik'
 import { z } from 'zod'
 import {
+  arrayDynamicFilter,
   arrayFilter,
   booleanFilter,
   comparisonFilter,
@@ -157,7 +158,7 @@ export type BuildView<
   >
   /**
    * Allows preprocessing the filters before they are interpreted
-  */
+   * */
   setFilterPreprocess: (preprocess: ((filters: TFilter, context: any) => Promise<TFilter> | TFilter)) => BuildView<TFilter, TFilterKey, TAliases>
   /**
    * Sets table aliases. By default there's a `_main` alias for the main table that's referenced in the FROM fragment.
@@ -178,7 +179,7 @@ export type BuildView<
    * @param field - The name of the filter - Can be a nested field, e.g. "user.name"
    * @param mapper - Optional if you want to use a different column name than the filter name
    * @returns
-   */
+   * */
   addBooleanFilter: <TKey extends Exclude<string, TFilterKey>>(
     name: TKey | TKey[],
     mapper?: ((table: {
@@ -191,14 +192,15 @@ export type BuildView<
    * Allows filtering by single or multiple string values
    * And returns all rows where the value is in the array
    * */
-  addInArrayFilter: <TKey extends Exclude<string, TFilterKey>>(
+  addInArrayFilter: <TKey extends Exclude<string, TFilterKey>, TType extends "text" | "numeric" | "integer" | "bigint"=never, TValue= [TType] extends [never] ? string : TType extends "numeric" | "integer" | "bigint" ? number : string>(
     name: TKey | TKey[],
     mapper?: ((table: {
       [x in TAliases]: IdentifierSqlToken
     } & {
       [x: string]: IdentifierSqlToken
-    }, value?: string | string[] | null, allFilters?: TFilter, ctx?: any) => SqlFragment)
-  ) => BuildView<TFilter & { [x in TKey]?: string | string[] | null }, keyof TFilter | TKey, TAliases>
+    }, value?: TValue | TValue[] | null, allFilters?: TFilter, ctx?: any) => SqlFragment),
+    type?: TType
+  ) => BuildView<TFilter & { [x in TKey]?: TValue | TValue[] | null }, keyof TFilter | TKey, TAliases>
   /**
    * Use this to add a generic filter, that returns a SQL fragment
    * This filter won't be applied if the value is null or undefined
@@ -406,8 +408,9 @@ export const buildView = (
     addDateFilter: (keys: string | string[], name?: any) => {
       return addFilter(dateFilter, keys, name);
     },
-    addInArrayFilter: (keys: string | string[], name?: any) => {
-      return addFilter(arrayFilter, keys, name);
+    addInArrayFilter: (keys: string | string[], name?: any, type?: string) => {
+      const arrFilter = type ? arrayDynamicFilter(type) : arrayFilter;
+      return addFilter(arrFilter, keys, name);
     },
     addGenericFilter: (name: string, interpret?: any) => {
       return addFilter(genericFilter, name, (table, value, ...args) => {
