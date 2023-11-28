@@ -6,33 +6,52 @@
 
 [Convert any SQL query](https://theartofpostgresql.com/blog/2019-09-the-r-in-orm) into an API.
 
-## Usage
+## Getting started
+
+Add the package and its peer dependencies to your project
 
 ```sh
-yarn add slonik-trpc
-yarn add slonik@33 zod@3
+yarn add slonik-trpc slonik zod
 ```
 
+## Basic Usage
+
+Create a view for your table/relation you want to query, using only the FROM clause part of a SQL query.
+
 ```ts
-import { sql } from 'slonik';
+import { buildView } from 'slonik-trpc';
+
+const postsView = buildView`
+FROM users
+LEFT JOIN posts
+    ON posts.author = users.id`
+```
+
+Then write the SELECT part with the fields you want to make queryable in the API, and type them with zod.
+
+```ts
 import { z } from 'zod';
-import { makeQueryLoader } from 'slonik-trpc';
+import { sql, makeQueryLoader } from 'slonik-trpc';
 
 const queryType = z.object({
     id: z.string(),
     name: z.string(),
+    text: z.string(),
     age: z.number(),
 });
+const selectQuery = sql.type(queryType)`
+SELECT "posts".id"
+  , "users"."firstName" || ' ' || "users"."lastName" AS "name"
+  , "posts"."text"
+  , EXTRACT(DAYS FROM NOW() - posts."created_at") AS "age"
+`
+
+// This loader is the type-safe API
 const loader = makeQueryLoader({
-    db: slonikConnection, // any DB connection will do
+    db: slonikConnection, // Any connection pool will do
     query: {
-        select: sql.type(queryType)`
-		SELECT id,
-			name,
-			EXTRACT(NOW() - created_at) AS age
-		`,
-        // The from fragment of the query is separated from the select portion.
-        from: sql.fragment`FROM users`,
+        select: selectQuery,
+        view: postsView,
     }
 });
 ```
@@ -40,9 +59,9 @@ const loader = makeQueryLoader({
 Query this loader/API by selecting just the fields you need.
 
 ```ts
-// The users type will return only id and age
-const users = await loader.load({
-    select: ["id", "age"],
+// This array is type-safe, only having "id", "text", and "age" fields
+const posts = await loader.load({
+    select: ["id", "text", "age"],
     take: 200,
 });
 ```
@@ -80,6 +99,10 @@ Here's a [demo](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datag
 
 You can refer to [the documentation](https://ardsh.github.io/slonik-trpc/) for advanced use-cases and tutorials.
 
+Read [slonik documentation](https://github.com/gajus/slonik#user-content-slonik-usage-connection-uri) for how to get started with it, but [you can also use other clients](#i-dont-wanna-switch-database-clients-eg-im-already-using-prisma-client), as long as they accept SQL and return an array of objects.
+
+Databases other than PostgreSQL aren't supported as of now, but can be made to work in limited use-cases (e.g. sqlite will work by specifying `useSqlite` in options).
+
 ## Advanced Usage
 
 ### Custom queries
@@ -88,6 +111,7 @@ Let's say you want to add a custom sub-query as a field to your relation.
 You can do this very easily.
 
 ```ts
+import { sql, buildView } from 'slonik-trpc';
 const query = sql.type(z.object({
     id: z.string(),
     name: z.string(),
@@ -97,7 +121,7 @@ const query = sql.type(z.object({
 }))`SELECT *,
     -- Count all the posts of the user as a number
     (SELECT COUNT(*) FROM posts WHERE posts.author = users.id) AS "authoredPosts"`;
-const fromFragment = sql.fragment`FROM users`;
+const userView = buildView`FROM users`;
 ```
 
 Note this count sub-query will be called only when the authoredPosts selected. Otherwise the database won't execute it, ensuring optimal performance.
@@ -146,6 +170,7 @@ buildView`FROM users`
     .addStringFilter(['users.name', 'users.profession'])
     .addComparisonFilter('postsCount', () => sql.fragment`users."authoredPosts"`)
     .addDateFilter('createdDate', () => sql.fragment`users.created_at`)
+    .addJsonContainsFilter('users.settings') // jsonb column
     .addBooleanFilter('isGmail', () => sql.fragment`users.email ILIKE '%gmail.com'`)
 ```
 
@@ -158,6 +183,12 @@ const specificUsers = await filtersLoader.load({
         createdDate: {
             _lte: new Date().toISOString(),
             _gte: new Date(Date.now() - 1000 * 3600 * 24).toISOString(),
+        },
+        "users.settings": {
+            // This allows filtering by a nested jsonb/json column
+            notifications: true,
+            // Users whose settings have notifications turned on, and a dark theme
+            theme: 'dark'
         },
         "users.profession": {
             _ilike: '%engineer%',

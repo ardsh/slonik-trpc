@@ -127,3 +127,114 @@ describe("Query builders", () => {
         }]);
     });
 });
+
+import { jsonbFilter, jsonbContainsFilter } from '../sqlUtils';
+
+describe('jsonbFilter', () => {
+    it('handles simple boolean value', () => {
+        const result = jsonbFilter('valid', true, ['meta']);
+        expect(result?.sql).toBe(`("meta"->>'valid')::bool = $1`);
+        expect(result?.values).toEqual([true]);
+    });
+    
+    it('handles simple number value', () => {
+        const result = jsonbFilter('amount', 123, ['meta']);
+        expect(result?.sql).toBe(`("meta"->>'amount')::float8 = $1`);
+        expect(result?.values).toEqual([123]);
+    });
+    
+    it('handles simple string value', () => {
+        const result = jsonbFilter('name', 'test', ['meta']);
+        expect(result?.sql).toBe(`("meta"->>'name') = $1`);
+        expect(result?.values).toEqual(['test']);
+    });
+    
+    it('handles nested object with mixed types', () => {
+        const nestedObject = {
+            nested: {
+                foo: '123',
+                bar: 321,
+                deep: {
+                    baz: 59,
+                    qux: false,
+                },
+            },
+        };
+
+        const result = jsonbFilter('meta', nestedObject);
+        expect(result?.sql).toBe(`(("meta"->'nested'->>'foo') = $1 AND ("meta"->'nested'->>'bar')::float8 = $2 AND (("meta"->'nested'->'deep'->>'baz')::float8 = $3 AND ("meta"->'nested'->'deep'->>'qux')::bool = $4))`);
+        expect(result?.values).toEqual(['123', 321, 59, false]);
+    });
+
+    it('handles null values', () => {
+        const result = jsonbFilter('nullableField', null, ['meta']);
+        expect(result?.sql).toBe(`("meta"->>'nullableField') IS NULL`);
+    });
+
+    it('Ignores null values in top-level field', () => {
+        const result = jsonbFilter('nullableField', null);
+        expect(result).toBeNull();
+    });
+
+    it("handles undefined value in top-level field", () => {
+        const result = jsonbFilter("undefinedField", undefined, ["meta"]);
+        expect(result).toBeNull();
+    });
+
+    it("Doesn't ignore null values in nested fields", () => {
+        const nestedObject = {
+            nested: {
+                bar: 321,
+                foo: null,
+            },
+        };
+
+        const result = jsonbFilter("meta", nestedObject);
+        expect(result?.sql).toBe(`(("meta"->'nested'->>'bar')::float8 = $1 AND ("meta"->'nested'->>'foo') IS NULL)`);
+        expect(result?.values).toEqual([321]);
+    });
+
+    it("(BUG) Ignores array values in nested fields", () => {
+        const nestedObject = {
+            nested: {
+                bar: 321,
+                interests: ['sports', 'music'],
+            },
+        };
+
+        const result = jsonbFilter("meta", nestedObject);
+        expect(result?.sql).toBe(`("meta"->'nested'->>'bar')::float8 = $1`);
+        expect(result?.values).toEqual([321]);
+    });
+
+    it("ignores undefined values in nested fields", () => {
+        const nestedObject = {
+            nested: {
+                foo: undefined,
+                bar: 321,
+            },
+        };
+
+        const result = jsonbFilter("meta", nestedObject);
+        expect(result?.sql).toBe(`("meta"->'nested'->>'bar')::float8 = $1`);
+        expect(result?.values).toEqual([321]);
+    });
+
+    it("returns null for entirely undefined nested object", () => {
+        const nestedObject = {
+            nested: {
+                foo: undefined,
+                bar: undefined,
+            },
+        };
+
+        const result = jsonbFilter("meta", nestedObject);
+        expect(result).toBeNull();
+    });
+
+    it("Handles jsonb contains filter", () => {
+        const result = jsonbContainsFilter({ foo: 'bar' }, sql.fragment`meta`);
+        expect(result?.sql).toBe(`(meta)::jsonb @> $1::jsonb`);
+        expect(result?.values).toEqual([JSON.stringify({ foo: 'bar' })]);
+    })
+});

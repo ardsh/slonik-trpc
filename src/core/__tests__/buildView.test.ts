@@ -176,6 +176,7 @@ describe("Filters", () => {
     .addComparisonFilter('usersID', (table, value) => sql.fragment`${table.users}.id`)
     .addComparisonFilter('postsCount', ({ users }) => sql.fragment`${users}."authoredPosts"`)
     .addDateFilter('users.created_at')
+    .addJsonContainsFilter('settings')
     .addBooleanFilter('isGmail', (table) => sql.fragment`${table.users}.email ILIKE '%gmail.com'`)
 
   it("Allows specifying generic filters", async () => {
@@ -227,5 +228,30 @@ describe("Filters", () => {
     expect(query.sql).toContain(`"users".id > `);
     expect(query.sql).toContain(`"posts"."title" = `);
     expect(query.sql).toContain(`) AND (`);
+  });
+  it('json filter handles a combination of different types', async () => {
+    const settings = {
+      theme: 'dark',
+      notifications: false,
+      preferences: {
+        layout: 'compact'
+      },
+      themes: ['dark', 'light']
+    }
+    const query = await userView.getWhereFragment({
+      where: {
+        settings,
+      }
+    });
+    expect(query.sql).toContain(`("users"."settings")::jsonb @> $1::jsonb`);
+    expect(query.values).toEqual([JSON.stringify(settings)]);
+  });
+  it("json filter is ignored if null", async () => {
+    const query = await userView.getWhereFragment({
+      where: {
+        settings: null,
+      }
+    });
+    expect(query?.sql).toBeFalsy();
   });
 });
