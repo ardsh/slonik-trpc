@@ -89,7 +89,7 @@ In actuality you'll want to avoid complex SQL fragments like the above, for perf
 
 ### Boolean filters
 
-The `addBooleanFilter` utility takes in a fragment and applies it if the input is true. It applies the reverse if the input is `false`, and doesn't apply anything if the input is `null`/`undefined`.
+The `addBooleanFilter` utility takes in a fragment and applies it if the input is true. It applies the inverse of the condition if the input is `false`, and doesn't apply the filter at all if the input is `null`/`undefined`.
 
 ```ts
 userView.addBooleanFilter('isGmail', () => sql.fragment`users.email ILIKE '%gmail.com'`)
@@ -109,6 +109,46 @@ The equivalent SQL would be
 
 ```sql
 WHERE NOT(email ILIKE '%gmail.com')
+```
+
+### JSON filters
+
+The `addJsonContainsFilter` utility is designed to filter records based on the contents of a JSONB column in your database. It uses PostgreSQL's `@>` operator to check if the JSONB column contains a specific structure or value.
+
+```ts
+// Adding the JSON contains filter
+view.addJsonContainsFilter('settings');
+```
+
+In this example, `addJsonContainsFilter` is set up to filter based on the 'settings' JSONB column.
+
+To use this filter, you can pass a corresponding object to the where clause:
+
+```ts
+// Example: Filtering for users with specific settings
+where: {
+    settings: {
+        notifications: true,
+        theme: 'dark'
+    }
+}
+```
+
+This query filters for users whose 'settings' JSONB column contains both the `notifications: true` and `theme: 'dark'` key-value pairs. The equivalent SQL would be:
+
+```sql
+WHERE "settings"::jsonb @> '{"notifications": true, "theme": "dark"}'
+```
+
+:::tip
+- The addJsonContainsFilter is particularly efficient for straightforward checks of presence or absence of certain keys/values in a JSONB column.
+- This method is ideal for scenarios where you need to filter records based on a set of JSONB criteria without the need for more complex JSONB querying capabilities.
+:::
+
+Similarly to other filters, you can specify a 2nd "mapper" argument to specify a different field from the filter name, e.g.
+
+```ts
+view.addJsonContainsFilter('settings', () => sql.fragment`users.user_settings`);
 ```
 
 ## Generic filters

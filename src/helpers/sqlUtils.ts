@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { sql } from 'slonik';
-import { Fragment } from './types';
+import { SerializableValue, Fragment } from './types';
 import { notEmpty } from './zod';
 
 export const arrayifyType = <T extends z.ZodType>(type: T) =>
@@ -235,3 +235,49 @@ export const stringFilter = (
     }
     return null;
 };
+
+export const jsonbFilter = (field: string, value: any, parentPath: string[] = []): Fragment | null => {
+    const fullPath = [...parentPath, field];
+
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        // Handle nested objects recursively
+        const conditions = Object.entries(value).map(([key, val]) => jsonbFilter(key, val, fullPath)).filter(notEmpty);
+        if (conditions.length === 0) return null;
+        if (conditions.length === 1) return conditions[0];
+        return sql.fragment`(${sql.join(conditions, sql.fragment` AND `)})`;
+    } else {
+        // Handle primitive values with appropriate casting
+        const pathExpr = sql.join(fullPath.flatMap((el, idx) => {
+            if (idx === 0) {
+                return [sql.identifier([el])];
+            } else if (idx === fullPath.length - 1) {
+                return [sql.fragment`->>`, sql.literalValue(el)];
+            } else {
+                return [sql.fragment`->`, sql.literalValue(el)] as any[];
+            }
+        }, ''), sql.fragment``);
+  
+        if (typeof value === 'number') {
+            return sql.fragment`(${pathExpr})::float8 = ${value}`;
+        } else if (typeof value === 'boolean') {
+            return sql.fragment`(${pathExpr})::bool = ${value}`;
+        } else if (value !== undefined && typeof value !== 'object') {
+            // For other types like string, no casting is necessary
+            return sql.fragment`(${pathExpr}) = ${value}`;
+        } else if (value === null && fullPath.length > 1) {
+            // Only handles null values for nested objects
+            return sql.fragment`(${pathExpr}) IS NULL`;
+        }
+        return null;
+    }
+}
+
+export const jsonbContainsFilter = (
+    filter: Record<string, SerializableValue> | undefined | null,
+    field: Fragment
+) => {
+    if (filter) {
+        return sql.fragment`(${field})::jsonb @> ${sql.jsonb(filter)}`;
+    }
+    return null;
+}

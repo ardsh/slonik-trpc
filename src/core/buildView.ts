@@ -9,6 +9,7 @@ import {
   dateFilter,
   dateFilterType,
   genericFilter,
+  jsonbContainsFilter,
   stringFilter,
   stringFilterType
 } from '../helpers/sqlUtils'
@@ -129,7 +130,6 @@ export type BuildView<
    * @returns
    */
   addComparisonFilter: <TKey extends Exclude<string, TFilterKey>>(
-    // Not adding allFilters + context in the interface until the API becomes more stable
     name: TKey | TKey[],
     mapper?: ((table: {
       [x in TAliases]: IdentifierSqlToken
@@ -138,6 +138,36 @@ export type BuildView<
     }, value?: z.infer<typeof comparisonFilterType>, allFilters?: TFilter, ctx?: any) => SqlFragment)
   ) => BuildView<
     TFilter & { [x in TKey]?: z.infer<typeof comparisonFilterType> },
+    keyof TFilter | TKey,
+    TAliases
+  >
+  /**
+   * Allows filtering jsonb columns, using the @> operator to check if a JSONB column contains a certain value or structure.
+   * ```
+    view.addJsonContainsFilter('settings', () => sql.fragment`'user.user_settings'`)
+    ```
+    Allows for
+    ```
+      where: {
+        settings: {
+          notifications: true,
+          theme: 'dark',
+          nested: {
+            value: 'something'
+          }
+        }
+      }
+    ```
+   * */
+  addJsonContainsFilter: <TKey extends Exclude<string, TFilterKey>>(
+    name: TKey | TKey[],
+    mapper?: ((table: {
+      [x in TAliases]: IdentifierSqlToken
+    } & {
+      [x: string]: IdentifierSqlToken
+    }, value?: any, allFilters?: TFilter, ctx?: any) => SqlFragment)
+  ) => BuildView<
+    TFilter & { [x in TKey]?: Parameters<typeof jsonbContainsFilter>[0] },
     keyof TFilter | TKey,
     TAliases
   >
@@ -236,6 +266,10 @@ export type BuildView<
     ctx?: any
   }): Promise<FragmentSqlToken>,
   getFromFragment(): FragmentSqlToken,
+  /**
+   * Returns all filters that have been added to the view
+   * @param options - Options for configuring the filters
+   */
   getFilters<
     TInclude extends (Extract<TFilterKey, string> | `${string}*`)=never,
     TExclude extends (Extract<TFilterKey, string> | `${string}*`)=never,
@@ -404,6 +438,9 @@ export const buildView = (
     },
     addBooleanFilter: (keys: string | string[], name?: any) => {
       return addFilter(booleanFilter, keys, name);
+    },
+    addJsonContainsFilter: (keys: string | string[], name?: any) => {
+      return addFilter(jsonbContainsFilter, keys, name);
     },
     addDateFilter: (keys: string | string[], name?: any) => {
       return addFilter(dateFilter, keys, name);
