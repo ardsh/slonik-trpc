@@ -14,17 +14,43 @@ Add the package and its peer dependencies to your project
 yarn add slonik-trpc slonik zod
 ```
 
+### List of features
+
+- [x] Declarative [filtering API](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/filtering) (filter creation utils included!)
+  - [x] Automatic support for `AND`, `NOT`, `OR` in all the filters
+  - [x] Ability to add [authorization filters](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/authorization) based on user auth context.
+- [x] [Select the fields](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/overfetching) you need, to avoid the overfetching problem.
+  - [x] Fully type-safe, only selected fields are returned in the types. If no selects are specified, every field is returned.
+- [x] Runtime validation of input (completely safe against unsanitized inputs).
+- [x] Optional runtime validation of output (Your zod types can be executed against your result, including transforming the output fields with zod transformers).
+- [x] [Virtual field](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/virtual-columns) declaration in typescript (fully type-safe + with async support).
+- [x] [Declarative sorting](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/sorting) capabilities, with support for custom SQL sorting expressions
+- [x] [DISTINCT ON](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/distinct) support with PostgreSQL, for all sortable columns
+- [x] [Offset-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/pagination).
+- [x] [Cursor-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/cursor-pagination).
+  - [x] Reverse page support
+- [x] [Plugins](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/plugins)
+
+### Requirements
+
+TypeScript 4.5+
+Slonik 33+
+Zod 3+
+
+
 ## Basic Usage
 
 Create a view for your table/relation you want to query, using only the FROM clause part of a SQL query.
 
 ```ts
-import { buildView } from 'slonik-trpc';
+import { buildView, sql } from 'slonik-trpc';
 
 const postsView = buildView`
 FROM users
 LEFT JOIN posts
     ON posts.author = users.id`
+.addStringFilter('posts.title')
+.addInArrayFilter('id', () => sql.fragment`posts.id`, 'numeric')
 ```
 
 Then write the SELECT part with the fields you want to make queryable in the API, and type them with zod.
@@ -62,34 +88,18 @@ Query this loader/API by selecting just the fields you need.
 // This array is type-safe, only having "id", "text", and "age" fields
 const posts = await loader.load({
     select: ["id", "text", "age"],
+    where: {
+        OR: [{
+            "posts.title": "Lorem Ipsum",
+        }, {
+            "posts.id": [3, 4],
+        }]
+    },
     take: 200,
 });
 ```
 
 Read on for more advanced usage, including how to use sorting, filtering, cursor pagination, authorization checks, creating a tRPC API and more.
-
-### List of features
-
-- [x] Declarative [filtering API](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/filtering) (filter creation utils included!)
-  - [x] Automatic support for `AND`, `NOT`, `OR` in all the filters
-  - [x] Ability to add [authorization filters](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/authorization) based on user auth context.
-- [x] [Select the fields](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/overfetching) you need, to avoid the overfetching problem.
-  - [x] Fully type-safe, only selected fields are returned in the types. If no selects are specified, every field is returned.
-- [x] Runtime validation of input (completely safe against unsanitized inputs).
-- [x] Optional runtime validation of output (Your zod types can be executed against your result, including transforming the output fields with zod transformers).
-- [x] [Virtual field](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/virtual-columns) declaration in typescript (fully type-safe + with async support).
-- [x] [Declarative sorting](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/sorting) capabilities, with support for custom SQL sorting expressions
-- [x] [DISTINCT ON](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/distinct) support with PostgreSQL, for all sortable columns
-- [x] [Offset-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/pagination).
-- [x] [Cursor-based pagination](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/cursor-pagination).
-  - [x] Reverse page support
-- [x] [Plugins](https://ardsh.github.io/slonik-trpc/docs/usage-main-features/plugins)
-
-### Requirements
-
-TypeScript 4.5+
-Slonik 33+
-Zod 3+
 
 ### Demo
 

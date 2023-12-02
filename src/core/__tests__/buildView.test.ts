@@ -49,7 +49,10 @@ it('Allows building a view from a string', async () => {
           name: 'Bob'
         }
       ]
-    }
+    },
+    options: {
+      orEnabled: true,
+    },
   });
   const data = await db.any(
     sql.unsafe`SELECT * ${usersView} ${whereFragment}`
@@ -147,6 +150,9 @@ it("Allows specifying composite tables", async () => {
       }, {
         "combined.users.last_name": 'abc',
       }]
+    },
+    options: {
+      orEnabled: true,
     }
   });
   expect(composite.sql).toContain(`"combined"."count" > `);
@@ -207,6 +213,9 @@ describe("Filters", () => {
         }, {
           ID: '123',
         }]
+      },
+      options: {
+        orEnabled: true,
       }
     });
     expect(query.sql).toContain(`"users".id = ANY(`);

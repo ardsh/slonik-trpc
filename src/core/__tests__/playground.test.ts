@@ -126,6 +126,9 @@ const filtersLoader = makeQueryLoader({
     db,
     filters,
     contextParser: testContext,
+    options: {
+        orFilterEnabled: true,
+    },
 });
 
 const gmailUsers = await filtersLoader.load({

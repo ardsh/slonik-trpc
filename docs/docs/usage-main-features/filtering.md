@@ -113,7 +113,7 @@ WHERE NOT(email ILIKE '%gmail.com')
 
 ### JSON filters
 
-The `addJsonContainsFilter` utility is designed to filter records based on the contents of a JSONB column in your database. It uses PostgreSQL's `@>` operator to check if the JSONB column contains a specific structure or value.
+The `addJsonContainsFilter` utility is designed to filter records based on the contents of a JSONB column in your database. It uses [PostgreSQL's `@>` operator](https://www.postgresql.org/docs/current/functions-json.html#FUNCTIONS-JSON-PROCESSING) to check if the JSONB column contains a specific structure or value.
 
 ```ts
 // Adding the JSON contains filter

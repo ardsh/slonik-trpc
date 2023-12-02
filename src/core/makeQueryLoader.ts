@@ -334,6 +334,11 @@ export function makeQueryLoader<
     };
     options?: {
         /**
+         * OR filters are disabled by default.
+         * Specify true to enable them.
+         * */
+        orFilterEnabled?: boolean
+        /**
          * This allows you to transform the column names of the selected object, before they're used to create the SQL query.
          * Useful if you've got a [slonik interceptor for camelCase columns.](https://github.com/gajus/slonik-interceptor-field-name-transformation)
          * 
@@ -486,7 +491,13 @@ export function makeQueryLoader<
             selectGroups,
         } = allArgs;
         const context = ctx && options.contextParser?.parse ? options.contextParser.parse(ctx) : ctx;
-        const filtersCondition = await interpretFilters?.({ where: where || ({} as any), ctx: context });
+        const filtersCondition = await interpretFilters?.({
+            where: where || ({} as any),
+            ctx: context,
+            options: {
+                orEnabled: !!options?.options?.orFilterEnabled,
+            }
+        });
         const authConditions = await options?.constraints?.(context);
         const auth = Array.isArray(authConditions) ? authConditions : [authConditions].filter(notEmpty);
         const allConditions = [...auth, ...(filtersCondition || [])].filter(notEmpty);
@@ -740,7 +751,7 @@ export function makeQueryLoader<
                     acc[key] = options?.filters?.filters?.[key] || z.any();
                     return acc;
                 }, {} as Record<string, any>)),
-                ...(!disabledFilters?.OR && { OR: z.array(filterType) }),
+                ...(!disabledFilters?.OR && options?.options?.orFilterEnabled && { OR: z.array(filterType) }),
                 ...(!disabledFilters?.AND && { AND: z.array(filterType) }),
                 ...(!disabledFilters?.NOT && { NOT: filterType }),
             }).partial()
