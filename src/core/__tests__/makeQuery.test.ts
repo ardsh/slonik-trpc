@@ -6,7 +6,7 @@ import { createFilters, makeFilter } from '../queryFilter';
 import { createGroupSelector } from '../selectGroups';
 import { arrayFilter, booleanFilter, dateFilter, dateFilterType, arrayifyType } from '../../helpers/sqlUtils';
 import { expectTypeOf } from 'expect-type';
-import { createOptions } from '../../index';
+import { createOptions, LoaderOptions } from '../../index';
 import { snakeCase } from "change-case";
 import {
     createFieldNameTransformationInterceptor
@@ -700,9 +700,10 @@ describe("withQueryLoader", () => {
     const getConditions = makeFilter(filterOptions.interpreters, filterOptions.options);
     type Filter = Parameters<typeof getConditions>[0];
 
-    const testFilters = (filter: Filter) => {
+    const testFilters = (filter: Filter, options?: LoaderOptions["options"]) => {
         const loader = makeQueryLoader({
             ...genericOptions,
+            options,
             filters: filterOptions,
         });
         return loader.load({
@@ -749,6 +750,15 @@ describe("withQueryLoader", () => {
         expect(items).toEqual([]);
     });
 
+    it("OR filters throw error if not explicitly enabled", async () => {
+        await expect(testFilters({
+            OR: [{
+                id: 3,
+            }, {
+                id: [3, 2],
+            }]
+        })).rejects.toThrow(/OR filters are not enabled/);
+    });
     it("OR filters work", async () => {
         const items = await testFilters({
             OR: [{
@@ -756,6 +766,8 @@ describe("withQueryLoader", () => {
             }, {
                 id: [3, 2],
             }]
+        }, {
+            orFilterEnabled: true,
         });
         expect(items).toEqual([expect.objectContaining({
             id: 2,
@@ -2201,6 +2213,10 @@ describe("withQueryLoader", () => {
         const spy = jest.fn();
         const loader = makeQueryLoader({
             ...genericOptions,
+            options: {
+                orFilterEnabled: true,
+                runtimeCheck: true,
+            },
             constraints(ctx) {
                 spy(ctx);
                 if (!ctx?.userId) return sql.fragment`FALSE`;
