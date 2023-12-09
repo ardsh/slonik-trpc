@@ -68,6 +68,7 @@ export type LoadParameters<
     TSortable extends string = never,
     TGroupSelectable extends string = never,
     TTakeCursors extends boolean = false,
+    TDisabledFilters extends "AND" | "OR" | "NOT"=never,
 > = {
     /** The fields that should be included. If `select` and `selectGroups` are unspecified, all fields are returned. */
     select?: readonly TSelect[];
@@ -175,7 +176,7 @@ export type LoadParameters<
     distinctOn?: OptionalArray<TSortable> | null;
     /* Pass the context that will be used for filters postprocessing and virtual field resolution */
     ctx?: TContext;
-    where?: RecursiveFilterConditions<TFilter>;
+    where?: RecursiveFilterConditions<TFilter, TDisabledFilters>;
 };
 
 export type ResultType<
@@ -220,6 +221,7 @@ export function makeQueryLoader<
     TSelectable extends Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
     TContext=z.infer<TContextZod>,
+    TFilterOrEnabled extends boolean = false,
 >(options: {
     query: {
         /** The select query (without including FROM) */
@@ -236,7 +238,8 @@ export function makeQueryLoader<
             (keyof (TVirtuals & z.infer<TObject>)) & TSelectable,
             TSortable,
             Exclude<keyof TGroups, number | symbol>,
-            boolean
+            boolean,
+            TFilterOrEnabled extends true ? never : "OR"
         >) => SqlFragment),
     },
     plugins?: readonly Plugin<any>[],
@@ -327,7 +330,8 @@ export function makeQueryLoader<
                 (keyof (z.infer<TObject>)) & TSelectable,
                 TSortable,
                 Exclude<keyof TGroups, number | symbol>,
-                boolean
+                boolean,
+                TFilterOrEnabled extends true ? never : "OR"
             >) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
@@ -337,7 +341,7 @@ export function makeQueryLoader<
          * OR filters are disabled by default.
          * Specify true to enable them.
          * */
-        orFilterEnabled?: boolean
+        orFilterEnabled?: TFilterOrEnabled,
         /**
          * This allows you to transform the column names of the selected object, before they're used to create the SQL query.
          * Useful if you've got a [slonik interceptor for camelCase columns.](https://github.com/gajus/slonik-interceptor-field-name-transformation)
@@ -379,6 +383,7 @@ export function makeQueryLoader<
         take?: number;
     };
 }) {
+    type TDisabledFilters = TFilterOrEnabled extends true ? never : "OR";
     const queryComponents = options.query;
     const query = queryComponents.select;
     let view = queryComponents.view;
@@ -428,7 +433,8 @@ export function makeQueryLoader<
         (keyof (TVirtuals & z.infer<TObject>)) & TSelectable,
         TSortable,
         Exclude<keyof TGroups, number | symbol>,
-        boolean
+        boolean,
+        TDisabledFilters
     >): Promise<readonly T[]> => {
         if (!rows.length) return rows;
         if (options.virtualFields) {
@@ -473,7 +479,8 @@ export function makeQueryLoader<
         (TSelect) & TSelectable,
         TSortable,
         TGroupSelected,
-        TTakeCursors
+        TTakeCursors,
+        TDisabledFilters
     >) => {
         let {
             take,
@@ -696,7 +703,11 @@ export function makeQueryLoader<
             AND?: boolean,
             OR?: boolean,
             NOT?: boolean,
-        } = never,
+        } = {
+            AND: false,
+            OR: TFilterOrEnabled,
+            NOT: false,
+        },
     >(
         {
             sortableColumns = Object.keys(options?.sortableColumns || {}) as never,
@@ -795,7 +806,9 @@ export function makeQueryLoader<
                 TVirtuals & z.infer<TObject>,
                 (TSelect) & TSelectable,
                 TSortable,
-                TGroupSelected
+                TGroupSelected,
+                false,
+                TDisabledFilters
             >, Exclude<GetNonEmptyKeys<TFilterTypes, TSortable>, "takeCursors">>, database?: Pick<CommonQueryMethods, "any">
         ) {
             // TODO: Remove this
@@ -867,7 +880,8 @@ export function makeQueryLoader<
                 (TSelect) & TSelectable,
                 TSortable,
                 TGroupSelected,
-                TTakeCursors
+                TTakeCursors,
+                TDisabledFilters
             >, GetNonEmptyKeys<TFilterTypes, TSortable>> & {
                 /**
                  * If true, a count query is called to fetch all the rows as if no `take` limit had been specified.
