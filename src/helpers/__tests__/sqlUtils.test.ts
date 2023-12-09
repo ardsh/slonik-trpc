@@ -112,6 +112,29 @@ describe("Query builders", () => {
         }]);
     });
 
+    it("Selects nested rows to array", async () => {
+        const result = await db.any(sql.unsafe`SELECT ${
+            rowsToArray(
+                sql.fragment`SELECT
+                    ${rowsToArray(
+                        sql.fragment`SELECT email`,
+                        sql.fragment`FROM users`,
+                        'emails'
+                    )}
+                , date_of_birth`,
+                sql.fragment`FROM users`,
+            )
+        }`);
+        expect(result).toEqual([{
+            users: expect.arrayContaining([{
+                emails: expect.arrayContaining([{
+                    email: expect.any(String),
+                }]),
+                date_of_birth: expect.any(String),
+            }])
+        }]);
+    });
+
     it("Selects row to object", async () => {
         const result = await db.any(sql.unsafe`SELECT ${
             rowToJson(

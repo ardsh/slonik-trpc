@@ -394,11 +394,6 @@ export const buildView = (
     if (!config.table) {
         config.table = fromFragment.sql.match(/(AS|\))\s+(\w+)\s*$/i)?.[2];
     }
-    if (!config.table) {
-        console.warn(
-            `Could not determine table name for ${fromFragment.sql}. Please use setAliases({ _main: 'tableName' }) to set the table name manually.`
-        );
-    }
     const interpreters = {} as Interpretors<Record<string, any>>;
 
     const getWhereConditions = async (
