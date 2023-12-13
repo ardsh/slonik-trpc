@@ -1,4 +1,4 @@
-import { sql, makeQueryLoader, InferPayload, InferArgs } from '../../index';
+import { sql, makeQueryLoader, InferPayload, InferArgs, buildView } from '../../index';
 import { z } from 'zod';
 import { makeQueryTester } from './makeQueryTester';
 
@@ -967,11 +967,13 @@ describe("withQueryLoader", () => {
         })).toEqual({
             where: undefined,
         });
-        expect(() => parser.parse({
+        expect(parser.parse({
             where: {
                 id: 3,
             },
-        })).toThrow(/received object/);
+        })).toEqual({
+            where: {},
+        });
         expectTypeOf(parsed.where).toEqualTypeOf<undefined>();
     });
 
@@ -2516,5 +2518,31 @@ describe("withQueryLoader", () => {
         expect(query[0]?.firstName).toBeDefined();
         // @ts-expect-error names are not selected
         expect(query[0].name).toEqual(query[0].firstName + " " + query[0].lastName);
+    });
+
+    // buildView
+
+    it("buildView combines filters with old-method filters", async () => {
+        const userView = buildView`FROM users`
+            .addStringFilter('users.firstName');
+        const loader = makeQueryLoader({
+            filters: genericOptions.filters,
+            query: {
+                select: sql.type(z.object({
+                    id: z.string(),
+                    firstName: z.string(),
+                    lastName: z.string(),
+                }))`SELECT *`,
+                view: userView,
+            },
+        });
+        const query = await loader.getQuery({
+            take: 1,
+            where: {
+                "users.firstName": "test",
+                largeIds: true,
+            }
+        });
+        expect(query.sql).toContain(`("users"."firstName" = $1)) AND ("id" > 5)`);
     });
 });

@@ -210,8 +210,11 @@ function getSelectedKeys(allKeys: string[], selected?: readonly any[]) {
 export function makeQueryLoader<
     TContextZod extends z.ZodTypeAny,
     TFragment extends SqlFragment | QuerySqlToken,
-    TView extends BuildView<TFilterTypes, keyof TFilterTypes>,
-    TFilterTypes extends Record<string, any>=TView extends BuildView<infer T> ? T : never,
+    TView extends BuildView,
+    TManualFilterTypes extends Record<string, any>=never,
+    TFilterTypes extends Record<string, any>=TView extends BuildView<infer T> ?
+        [TManualFilterTypes] extends [never] ? T : T & TManualFilterTypes :
+        TManualFilterTypes,
     TObject extends z.AnyZodObject=TFragment extends QuerySqlToken<infer T> ? T : any,
     TVirtuals extends Record<string, any> = z.infer<TObject>,
     TSortable extends string = never,
@@ -263,9 +266,9 @@ export function makeQueryLoader<
      * You can use the {@link buildView} to build relations with their own filters.
      * */
     filters?: {
-        filters: TFilterTypes,
-        interpreters: Interpretors<TFilterTypes, TContext>,
-        options?: FilterOptions<TFilterTypes, TContext>
+        filters: TManualFilterTypes,
+        interpreters: Interpretors<TManualFilterTypes, TContext>,
+        options?: FilterOptions<TManualFilterTypes, TContext>
     }
     /**
      * You can add any hardcoded conditions here, to be used for authorization.  
@@ -388,10 +391,13 @@ export function makeQueryLoader<
     const query = queryComponents.select;
     let view = queryComponents.view;
     const fromFragment = queryComponents.from || view?.getFromFragment();
-    if (options.filters && !view && fromFragment) {
+    if (options.filters?.interpreters && !view && fromFragment) {
         // backwards compatible if only filters are specified
         view = buildView`${fromFragment}`
             .addFilters(options.filters.interpreters as any) as any;
+    } else if (options.filters?.interpreters && view) {
+        // Add filters to existing view if both are specified
+        view = view.addFilters(options.filters.interpreters as any) as any;
     }
     if (query.sql.match(/;\s*$/)) {
         // TODO: Add more checks for invalid queries
@@ -657,8 +663,7 @@ export function makeQueryLoader<
         `;
         if (!select?.length && !selectGroups?.length && !fields.length) {
             finalKeys.push(sql.fragment`*`);
-        }
-        if (takeCursors && lateralExpressions?.length) {
+        } else if (takeCursors && lateralExpressions?.length) {
             finalKeys.push(sql.identifier(["root_query", cursorColumns]));
         }
 
@@ -752,10 +757,13 @@ export function makeQueryLoader<
             }) : (a) => (Array.isArray(a) && (Array.isArray(a[0]) || a[0] === undefined) ? a : [a].filter(notEmpty))),
             orderUnion
         );
-        type ActualFilters = [TFilterTypes] extends [never] ? never : RecursiveFilterConditions<
+        type ActualFilters = [TFilterTypes] extends [never] ? never :
+            TFilterTypes extends Record<never, any> ? never :
+            RecursiveFilterConditions<
             TFilter, Extract<keyof TFiltersDisabled, "AND" | "OR" | "NOT">>;
 
-        const filterKeys = Object.keys(options.query.view?.getFilters() || options?.filters?.filters || {})
+        const filterKeys = Object.keys(options.query.view?.getFilters() || {})
+            .concat(Object.keys(options?.filters?.filters || {}))
         const filterType: any = z.lazy(() =>
             z.object({
                 ...(filterKeys.reduce((acc, key) => {
@@ -766,7 +774,7 @@ export function makeQueryLoader<
                 ...(!disabledFilters?.AND && { AND: z.array(filterType) }),
                 ...(!disabledFilters?.NOT && { NOT: filterType }),
             }).partial()
-        );
+        ).nullish();
 
         return z.object({
             /** The fields that should be included. If unspecified, all fields are returned. */
@@ -787,7 +795,7 @@ export function makeQueryLoader<
             orderBy: options?.defaults?.orderBy ?
                 orderBy.default(options.defaults.orderBy) as never :
                 orderBy as unknown as typeof orderUnion,
-            where: filterKeys.length ? filterType as z.ZodType<ActualFilters> : z.null() as never,
+            where: filterType as z.ZodType<ActualFilters>,
         }).partial();
     };
     const self = {
