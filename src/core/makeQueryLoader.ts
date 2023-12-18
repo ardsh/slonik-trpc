@@ -225,6 +225,7 @@ export function makeQueryLoader<
         = Exclude<keyof (z.infer<TObject> & TVirtuals), number | symbol>,
     TContext=z.infer<TContextZod>,
     TFilterOrEnabled extends boolean = false,
+    TSortableDefault extends TSortable = TSortable,
 >(options: {
     query: {
         /** The select query (without including FROM) */
@@ -382,7 +383,7 @@ export function makeQueryLoader<
         runConcurrency?: number
     },
     defaults?: {
-        orderBy?: OptionalArray<readonly [TSortable, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
+        orderBy?: OptionalArray<readonly [TSortableDefault, 'ASC' | 'DESC' | 'ASC NULLS LAST' | 'DESC NULLS LAST']> | null;
         take?: number;
     };
 }) {
@@ -491,11 +492,11 @@ export function makeQueryLoader<
         let {
             take,
             select,
+            orderBy,
         } = allArgs;
         const {
             where,
             skip,
-            orderBy=options?.defaults?.orderBy,
             distinctOn,
             ctx,
             cursor,
@@ -511,6 +512,10 @@ export function makeQueryLoader<
                 orEnabled: !!options?.options?.orFilterEnabled,
             }
         });
+        // Allows easier usage of cursor pagination with default sorting
+        if (!orderBy?.length && options.defaults?.orderBy?.length) {
+            orderBy = options.defaults.orderBy;
+        }
         const authConditions = await options?.constraints?.(context);
         const auth = Array.isArray(authConditions) ? authConditions : [authConditions].filter(notEmpty);
         const allConditions = [...auth, ...(filtersCondition || [])].filter(notEmpty);
@@ -927,7 +932,7 @@ export function makeQueryLoader<
             if (!db?.any) throw new Error("Database not provided");
             const reverse = !!args.take && args.take < 0 ? -1 : 1;
             const take = (typeof args.take === 'number' && args.take < 0) ? -args.take : args.take;
-            if (reverse === -1 && !allArgs.orderBy?.length) {
+            if (reverse === -1 && !allArgs.orderBy?.length && !options?.defaults?.orderBy?.length) {
                 throw new Error("orderBy must be specified when take parameter is negative!");
             }
             const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (take || 25) + 1;
