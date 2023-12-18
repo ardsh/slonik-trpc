@@ -1660,6 +1660,53 @@ describe("withQueryLoader", () => {
         })).rejects.toThrow(/orderBy must be specified/);
     });
 
+    it("Sorting is specified by default options", async () => {
+        const loader = makeQueryLoader({
+            db,
+            defaults: {
+                orderBy: [["id", "DESC"]],
+            },
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
+            sortableColumns: {
+                id: "id",
+                upperValue: sql.fragment`UPPER("value")`,
+            }
+        });
+
+        const data = await loader.loadPagination({
+            take: -2,
+            orderBy: [],
+            takeCursors: true,
+            select: ['id', 'value'],
+        });
+        expect(data).toEqual({
+            cursors: [expect.any(String), expect.any(String)],
+            nodes: [{
+                id: 2,
+                value: "aaa",
+            }, {
+                id: 1,
+                value: "aaa",
+            }],
+            pageInfo: {
+                hasPreviousPage: true,
+                endCursor: expect.any(String),
+                startCursor: expect.any(String),
+                hasNextPage: false,
+                minimumCount: 3,
+                count: null,
+            },
+        });
+        const query = await loader.getQuery({
+            take: -2,
+            select: ['id'],
+        });
+        expect(query.sql).toContain(`ORDER BY "id" ASC`)
+    });
+
     it("Cursor-based pagination doesn't work properly if searchAfter values aren't specified (NOT A BUG) (UNSPECIFIED BEHAVIOR, MAY CHANGE)", async () => {
         const loader = makeQueryLoader({
             db,
