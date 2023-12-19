@@ -56,7 +56,7 @@ type OptionalArray<T> = readonly T[] | T;
 
 // Need to pick used keys explicitly, omitting doesn't work
 type GetNonEmptyKeys<TFilter extends Record<string, z.ZodTypeAny>=never, TSortable extends string=never> =
-    ([TFilter] extends [never] ? "take" : "where") |
+    ([TFilter] extends [never] ? "take" : [keyof TFilter] extends [never] ? "take" : "where") |
     ([TSortable] extends [never] ? "take" : ("orderBy" | "searchAfter" | "takeCursors" | "cursor" | "distinctOn")) |
     "take" | "skip" | "select" | "ctx" | "selectGroups";
 
@@ -713,11 +713,7 @@ export function makeQueryLoader<
             AND?: boolean,
             OR?: boolean,
             NOT?: boolean,
-        } = {
-            AND: false,
-            OR: TFilterOrEnabled,
-            NOT: false,
-        },
+        } = never,
     >(
         {
             sortableColumns = Object.keys(options?.sortableColumns || {}) as never,
@@ -763,21 +759,21 @@ export function makeQueryLoader<
             orderUnion
         );
         type ActualFilters = [TFilterTypes] extends [never] ? never :
-            TFilterTypes extends Record<never, any> ? never :
-            RecursiveFilterConditions<
-            TFilter, Extract<keyof TFiltersDisabled, "AND" | "OR" | "NOT">>;
+            [keyof TFilterTypes] extends [never] ? never :
+        RecursiveFilterConditions<TFilter, Extract<keyof TFiltersDisabled, "AND" | "OR" | "NOT"> | TDisabledFilters>;
 
         const filterKeys = Object.keys(options.query.view?.getFilters() || {})
             .concat(Object.keys(options?.filters?.filters || {}))
+        const hasFilters = !!filterKeys.length;
         const filterType: any = z.lazy(() =>
             z.object({
                 ...(filterKeys.reduce((acc, key) => {
                     acc[key] = options?.filters?.filters?.[key] || z.any();
                     return acc;
                 }, {} as Record<string, any>)),
-                ...(!disabledFilters?.OR && options?.options?.orFilterEnabled && { OR: z.array(filterType) }),
-                ...(!disabledFilters?.AND && { AND: z.array(filterType) }),
-                ...(!disabledFilters?.NOT && { NOT: filterType }),
+                ...(hasFilters && !disabledFilters?.OR && options?.options?.orFilterEnabled && { OR: z.array(filterType) }),
+                ...(hasFilters && !disabledFilters?.AND && { AND: z.array(filterType) }),
+                ...(hasFilters && !disabledFilters?.NOT && { NOT: filterType }),
             }).partial()
         ).nullish();
 
