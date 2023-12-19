@@ -945,10 +945,10 @@ describe("withQueryLoader", () => {
         expectTypeOf(parsed.select?.[0]).toEqualTypeOf<"id" | "value" | "asdf" | undefined>();
 
         expectTypeOf((parsed as InferArgs<typeof loader>).select?.[0]).toEqualTypeOf<"dummyField" | "id" | undefined>();
-        expectTypeOf(parsed.where).toMatchTypeOf<InferArgs<typeof loader>["where"] | undefined>();
-        expectTypeOf(parsed.orderBy).toMatchTypeOf<InferArgs<typeof loader>["orderBy"] | undefined>();
-        expectTypeOf(parsed.searchAfter).toMatchTypeOf<InferArgs<typeof loader>["searchAfter"] | undefined>();
-        expectTypeOf(parsed.selectGroups).toMatchTypeOf<InferArgs<typeof loader>["selectGroups"] | undefined>();
+        expectTypeOf(parsed.where).toMatchTypeOf<InferArgs<typeof loader>["where"]>();
+        expectTypeOf(parsed.orderBy).toMatchTypeOf<InferArgs<typeof loader>["orderBy"]>();
+        expectTypeOf(parsed.searchAfter).toMatchTypeOf<InferArgs<typeof loader>["searchAfter"]>();
+        expectTypeOf(parsed.selectGroups).toMatchTypeOf<InferArgs<typeof loader>["selectGroups"]>();
     });
 
     it("Doesn't allow filtering when no filters are specified", async () => {
@@ -970,6 +970,12 @@ describe("withQueryLoader", () => {
         expect(parser.parse({
             where: {
                 id: 3,
+                AND: [{
+                    id: 5,
+                }],
+                OR: [{
+                    blabla: true,
+                }],
             },
         })).toEqual({
             where: {},
