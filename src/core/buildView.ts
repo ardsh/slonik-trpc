@@ -94,7 +94,7 @@ export type BuildView<
      */
     addStringFilter: <TKey extends Exclude<string, TFilterKey>>(
         field: TKey | TKey[],
-        name?: (
+        name?: SqlFragment | ((
             table: {
                 [x in TAliases]: IdentifierSqlToken;
             } & {
@@ -103,7 +103,7 @@ export type BuildView<
             value?: z.infer<typeof stringFilterType>,
             allFilters?: TFilter,
             ctx?: any
-        ) => SqlFragment
+        ) => SqlFragment)
     ) => BuildView<
         TFilter & { [x in TKey]?: z.infer<typeof stringFilterType> },
         keyof TFilter | TKey,
@@ -117,7 +117,7 @@ export type BuildView<
      */
     addComparisonFilter: <TKey extends Exclude<string, TFilterKey>>(
         name: TKey | TKey[],
-        mapper?: (
+        mapper?: SqlFragment | ((
             table: {
                 [x in TAliases]: IdentifierSqlToken;
             } & {
@@ -126,7 +126,7 @@ export type BuildView<
             value?: z.infer<typeof comparisonFilterType>,
             allFilters?: TFilter,
             ctx?: any
-        ) => SqlFragment
+        ) => SqlFragment)
     ) => BuildView<
         TFilter & { [x in TKey]?: z.infer<typeof comparisonFilterType> },
         keyof TFilter | TKey,
@@ -152,7 +152,7 @@ export type BuildView<
    * */
     addJsonContainsFilter: <TKey extends Exclude<string, TFilterKey>>(
         name: TKey | TKey[],
-        mapper?: (
+        mapper?: SqlFragment | ((
             table: {
                 [x in TAliases]: IdentifierSqlToken;
             } & {
@@ -161,7 +161,7 @@ export type BuildView<
             value?: any,
             allFilters?: TFilter,
             ctx?: any
-        ) => SqlFragment
+        ) => SqlFragment)
     ) => BuildView<
         TFilter & { [x in TKey]?: Parameters<typeof jsonbContainsFilter>[0] },
         keyof TFilter | TKey,
@@ -172,7 +172,7 @@ export type BuildView<
      * */
     addDateFilter: <TKey extends Exclude<string, TFilterKey>>(
         name: TKey | TKey[],
-        mapper?: (
+        mapper?: SqlFragment | ((
             table: {
                 [x in TAliases]: IdentifierSqlToken;
             } & {
@@ -181,7 +181,7 @@ export type BuildView<
             value?: z.infer<typeof dateFilterType>,
             allFilters?: TFilter,
             ctx?: any
-        ) => SqlFragment
+        ) => SqlFragment)
     ) => BuildView<
         TFilter & { [x in TKey]?: z.infer<typeof dateFilterType> },
         keyof TFilter | TKey,
@@ -220,7 +220,7 @@ export type BuildView<
      * */
     addBooleanFilter: <TKey extends Exclude<string, TFilterKey>>(
         name: TKey | TKey[],
-        mapper?: (
+        mapper?: SqlFragment | ((
             table: {
                 [x in TAliases]: IdentifierSqlToken;
             } & {
@@ -229,7 +229,7 @@ export type BuildView<
             value?: boolean,
             allFilters?: TFilter,
             ctx?: any
-        ) => SqlFragment
+        ) => SqlFragment)
     ) => BuildView<
         TFilter & { [x in TKey]?: boolean },
         keyof TFilter | TKey,
@@ -249,7 +249,7 @@ export type BuildView<
             : string
     >(
         name: TKey | TKey[],
-        mapper?: (
+        mapper?: SqlFragment | ((
             table: {
                 [x in TAliases]: IdentifierSqlToken;
             } & {
@@ -258,7 +258,7 @@ export type BuildView<
             value?: TValue | TValue[] | null,
             allFilters?: TFilter,
             ctx?: any
-        ) => SqlFragment,
+        ) => SqlFragment),
         type?: TType
     ) => BuildView<
         TFilter & { [x in TKey]?: TValue | TValue[] | null },
@@ -436,12 +436,12 @@ export const buildView = (
     const addFilter = (
         interpreter: (value: any, field: FragmentSqlToken) => any,
         fields: string | string[],
-        mapper?: (
+        mapper?: SqlFragment | ((
             table: IdentifierSqlToken | Record<string, IdentifierSqlToken>,
             value?: any,
             allFilters?: any,
             context?: any
-        ) => SqlFragment
+        ) => SqlFragment)
     ) => {
         if (mapper && Array.isArray(fields) && fields.length > 1) {
             throw new Error(
@@ -465,7 +465,7 @@ export const buildView = (
                         }
                         const identifier = mapper
                             ? // Try to get the table name from the 2nd to last prefix if it exists, if not then use main table
-                              mapper(identifierProxy, value, allFilters, ctx)
+                              typeof mapper === 'function' ? mapper(identifierProxy, value, allFilters, ctx) : mapper
                             : config.table && keys.length <= 1
                             ? (sql.identifier([
                                   config.table,
