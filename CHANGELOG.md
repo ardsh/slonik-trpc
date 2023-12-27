@@ -1,5 +1,12 @@
 # slonik-trpc
 
+## 0.15.0
+
+### Minor Changes
+
+-   e6ad803: Added buildView utilty for building easier filters.
+    Backwards compatible change but deprecated older method for creating filters.
+
 ## 0.14.3
 
 ### Patch Changes
