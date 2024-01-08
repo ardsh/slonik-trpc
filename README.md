@@ -423,18 +423,35 @@ The virtual fields can then be selected like normal fields.
 
 #### Async loading in virtual fields
 
-If you need to load remote data in your virtual fields, it's often more efficient to use a batch loader, rather than returning a promise in the resolve function of each row. Use `virtualFieldLoaders` for this purpose.
+If you need to load remote data in your virtual fields, it's often more efficient to use a batch loader, rather than returning a promise in the resolve function of each row. Use `load` for this purpose.
+
+##### ❌ **⚠️ Avoid This!**
 
 ```ts
-virtualFieldLoaders: {
-    posts: async (rows) => {
-        const allPosts = await fetchPostsForAuthors(rows.map(row => row.id));
-        return allPosts;
-    },
-},
 virtualFields: {
     posts: {
         dependencies: ["id"],
+        // 📉 This can lead to performance issues.
+        resolve: async (row) => {
+            const posts = await fetchPostsForAuthor(row.id);
+            return posts;
+        }
+    }
+},
+```
+
+##### ✅ Do This Instead!
+
+```ts
+virtualFields: {
+    posts: {
+        dependencies: ["id"],
+        // 🚀 Use the load function to fetch data in batches
+        async load(rows) {
+            const allPosts = await fetchPostsForAuthors(rows.map(row => row.id));
+            return allPosts;
+        },
+        // ✔️ Use the resolve function to handle synchronous operations.
         resolve: (row, args, posts) => {
             // Only return the posts of each user.
             return posts.filter(post => post.authorId = row.id)
