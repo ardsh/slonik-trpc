@@ -237,6 +237,8 @@ describe("withQueryLoader", () => {
                             userId: 'z'
                         });
                         expectTypeOf(args.ctx).toEqualTypeOf<{ userId: string } | undefined>();
+                        expectTypeOf(args.index).toEqualTypeOf<number>();
+                        expect(args.index).toEqual(expect.any(Number));
                         return Promise.resolve(row.id + row.uid);
                     },
                     dependencies: ["id", "uid"],
@@ -295,52 +297,28 @@ describe("withQueryLoader", () => {
                 select: sql.type(zodType)`SELECT *`,
                 from: sql.fragment`FROM test_table_bar`,
             },
-            virtualFieldLoaders: {
-                ids: async (rows, args) => {
-                    expectTypeOf(rows).toEqualTypeOf<Readonly<Array<z.infer<typeof zodType>>>>();
-                    return rows.map(row => row.id + row.uid);
-                },
-            },
             virtualFields: {
                 ids: {
+                    async load(rows, args) {
+                        expectTypeOf(rows).toEqualTypeOf<Readonly<Array<z.infer<typeof zodType>>>>();
+                        return rows.map(row => row.id + row.uid);
+                    },
                     resolve: async (row, args, remoteFields) => {
-                        expectTypeOf(remoteFields).toEqualTypeOf<string[]>();
-                        expect(remoteFields).toEqual([expect.any(String)]);
-                        return remoteFields;
+                        expect(remoteFields).toEqual([expect.any(String), expect.any(String)]);
+                        return remoteFields[args.index];
                     },
                     dependencies: ["id", "uid"],
                 }
             }
         });
         const query = await loader.load({
-            take: 1,
+            take: 2,
             select: ['ids'],
         });
         expect(query[0]).toEqual(expect.objectContaining({
-            ids: [expect.any(String)],
+            ids: expect.any(String),
         }));
-        expect(query[0].ids[0]).toEqual(expect.any(String));
-        expectTypeOf(query[0].ids).toEqualTypeOf<string[]>();
-    });
-
-    it("Doesn't allow non-existent virtual fields to be used in loaders", async () => {
-        const loader = makeQueryLoader({
-            db,
-            query: {
-                select: sql.type(zodType)`SELECT *`,
-                from: sql.fragment`FROM test_table_bar`,
-            },
-            virtualFieldLoaders: {
-                // @ts-expect-error ids is not a virtual field
-                ids: async (rows, args) => {
-                    return rows.map(row => row.id + row.uid);
-                },
-            },
-        });
-        await expect(() => loader.load({
-            // @ts-expect-error ids is not a virtual field
-            select: ["ids"]
-        })).rejects.toThrow();
+        expect(query[0].ids).toEqual('1z');
     });
 
     it("Supports multiple (mixed) virtual fields", async () => {

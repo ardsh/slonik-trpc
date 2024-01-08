@@ -225,7 +225,6 @@ export function makeQueryLoader<
     TContext=z.infer<TContextZod>,
     TFilterOrEnabled extends boolean = false,
     TSortableDefault extends TSortable = TSortable,
-    TRemoteLoad extends Record<keyof TVirtuals, any> = Record<keyof TVirtuals, never>,
 >(options: {
     query: {
         /** The select query (without including FROM) */
@@ -322,29 +321,27 @@ export function makeQueryLoader<
      * */
     selectableColumns?: readonly [TSelectable, ...TSelectable[]];
     /**
-     * Use this in conjunction with `virtualFields` for loading data more efficiently in batches.
-     * Virtual field resolvers have access to the same field that is loaded here
-     * */
-    virtualFieldLoaders?: {
-        [x in keyof TRemoteLoad]?: (
-        rows: readonly z.infer<TObject>[],
-        args: LoadParameters<
-            TFilterTypes,
-            TContext,
-            z.infer<TObject>,
-            keyof z.infer<TObject> & TSelectable,
-            TSortable,
-            Exclude<keyof TGroups, number | symbol>,
-            boolean,
-            TFilterOrEnabled extends true ? never : 'OR'
-        >
-        ) => PromiseLike<TRemoteLoad[x]> | TRemoteLoad[x]
-    }
-    /**
      * Specify a mapping of virtual fields, with their dependencies
      * */
     virtualFields?: {
         [x in keyof TVirtuals]?: {
+            /**
+             * Use this to load data more efficiently in batches.
+             * The resolver function has access to the result of this function
+             * */
+            load?: (
+                rows: readonly z.infer<TObject>[],
+                args: LoadParameters<
+                    TFilterTypes,
+                    TContext,
+                    z.infer<TObject>,
+                    keyof z.infer<TObject> & TSelectable,
+                    TSortable,
+                    Exclude<keyof TGroups, number | symbol>,
+                    boolean,
+                    TFilterOrEnabled extends true ? never : 'OR'
+                >,
+            ) => any,
             /** Return the virtual field */
             resolve: (row: z.infer<TObject>, args: LoadParameters<
                 TFilterTypes,
@@ -355,8 +352,8 @@ export function makeQueryLoader<
                 Exclude<keyof TGroups, number | symbol>,
                 boolean,
                 TFilterOrEnabled extends true ? never : "OR"
-            >,
-                remoteLoadResult: x extends keyof TRemoteLoad ? TRemoteLoad[x] : undefined
+            > & { index: number },
+                remoteLoadResult?: any
             ) => PromiseLike<TVirtuals[x]> | TVirtuals[x];
             dependencies: readonly (keyof z.infer<TObject>)[];
         };
@@ -471,20 +468,30 @@ export function makeQueryLoader<
             if (selected.length) {
                 const { default: Nativebird } = await import('nativebird');
                 await Promise.all(selected.map(async key => {
-                    const remoteLoad = await options.virtualFieldLoaders?.[key]?.(rows, args) as any;
+                    const remoteLoad = await options.virtualFields?.[key]?.load?.(rows, args);
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    const firstResolve = options.virtualFields![key]!.resolve(rows[0], args, remoteLoad);
+                    const firstResolve = options.virtualFields![key]!.resolve(rows[0], {
+                        ...args,
+                        index: 0,
+                    }, remoteLoad);
                     if (typeof (firstResolve as PromiseLike<any>)?.then === 'function') {
-                        await Nativebird.map(rows.slice(1), async (row: any) => {
+                        await Nativebird.map(rows.slice(1), async (row: any, index) => {
                             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                            row[key] = await options.virtualFields![key]!.resolve(row, args, remoteLoad);
+                            row[key] = await options.virtualFields![key]!.resolve(row, {
+                                ...args,
+                                index,
+                            }, remoteLoad);
                         }, { concurrency: options?.options?.runConcurrency || 50 });
                         (rows as any)[0][key] = await firstResolve;
                     } else {
                         (rows as any)[0][key] = firstResolve;
+                        let index = 0;
                         for (const row of rows.slice(1) as any[]) {
                             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                            row[key] = options.virtualFields![key]!.resolve(row, args, remoteLoad);
+                            row[key] = options.virtualFields![key]!.resolve(row, {
+                                ...args,
+                                index: ++index,
+                            }, remoteLoad);
                         }
                     }
                 }));
