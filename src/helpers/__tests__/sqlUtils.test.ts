@@ -121,8 +121,9 @@ describe("Query builders", () => {
                         sql.fragment`FROM users`,
                         'emails'
                     )}
-                , date_of_birth`,
-                sql.fragment`FROM users`,
+                , date_of_birth
+                FROM users`,
+                'users'
             )
         }`);
         expect(result).toEqual([{

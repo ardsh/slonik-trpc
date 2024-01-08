@@ -421,6 +421,28 @@ const virtualFieldsLoader = makeQueryLoader({
 
 The virtual fields can then be selected like normal fields.
 
+#### Async loading in virtual fields
+
+If you need to load remote data in your virtual fields, it's often more efficient to use a batch loader, rather than returning a promise in the resolve function of each row. Use `virtualFieldLoaders` for this purpose.
+
+```ts
+virtualFieldLoaders: {
+    posts: async (rows) => {
+        const allPosts = await fetchPostsForAuthors(rows.map(row => row.id));
+        return allPosts;
+    },
+},
+virtualFields: {
+    posts: {
+        dependencies: ["id"],
+        resolve: (row, args, posts) => {
+            // Only return the posts of each user.
+            return posts.filter(post => post.authorId = row.id)
+        }
+    }
+},
+```
+
 ### Nested arrays and objects
 
 You can use PostgreSQL functions for creating json arrays and objects in your query. Two such utils are exposed for convenience through `rowToJson` and `rowsToArray`.

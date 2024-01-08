@@ -13,21 +13,21 @@ export const rowToJson = (fragment: Fragment, name?: string) => sql.fragment`
 row_to_json((SELECT row FROM (${fragment}) row)) AS ${sql.identifier([name || 'row_to_json'])}
 `;
 
-export const rowsToArray = (
+interface RowsToArray {
+    (fragment: Fragment, name?: string): Fragment;
+    (fragment: Fragment, fromFragment: Fragment, name?: string): Fragment;
+}
+
+export const rowsToArray: RowsToArray = (
     fragment: Fragment,
-    fromFragment: Fragment,
+    fromFragment?: Fragment | string,
     name?: string
-) => sql.fragment`
-( SELECT coalesce(json_agg("rows"), '[]') AS "rows" FROM (
-SELECT row_to_json((
-        SELECT "element" FROM (
-            ${fragment}
-        ) AS "element"
-    )) AS "rows"
-    ${fromFragment}
-) all_rows
-) AS ${sql.identifier([name || findTableName(fromFragment) || 'rows_to_array'])}
-`;
+) => {
+    const isString = typeof fromFragment === 'string';
+    return sql.fragment`(
+  SELECT COALESCE(json_agg(all_rows), '[]') FROM (${fragment} ${isString || !fromFragment ? sql.fragment`` : fromFragment}) AS all_rows
+) AS ${sql.identifier([name || (isString ? fromFragment : findTableName(fromFragment)) || 'rows_to_array'])}`
+    };
 
 export const arrayStringFilterType = arrayifyType(z.string());
 
@@ -64,8 +64,8 @@ export const genericFilter = (
     return null;
 };
 
-const findTableName = (fragment: Fragment) => {
-    const table = fragment.sql.match(/^\s*FROM\s+(\S+)/i)?.[1];
+const findTableName = (fragment?: Fragment) => {
+    const table = fragment?.sql.match(/^\s*FROM\s+(\S+)/i)?.[1];
     return table?.replace(/\W+/g, '')?.toLowerCase();
 };
   
