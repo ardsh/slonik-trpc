@@ -1,10 +1,7 @@
 import { sql } from 'slonik';
-import { makeQueryLoader } from 'slonik-trpc';
-import { arrayFilter, dateFilter, booleanFilter, arrayStringFilterType,
-    createFilters, dateFilterType, genericFilter } from 'slonik-trpc/utils';
+import { makeQueryLoader, buildView } from 'slonik-trpc';
 import { z } from 'zod';
 import { db } from '../db';
-import type { Context } from '../router';
 
 const query = sql.type(
     z.object({
@@ -28,42 +25,31 @@ const query = sql.type(
     posts.author_id,
     posts.created_at
 `;
-const fromFragment = sql.fragment`FROM posts
+const view = buildView`FROM posts
 LEFT JOIN users author
-    ON author.id = posts.author_id`;
-
-const filters = createFilters<Context>()({
-    authorName: z.string(),
-    id: arrayStringFilterType,
-    author_id: arrayStringFilterType,
-    date: dateFilterType,
-    longPost: z.boolean(),
-    postLength: z.number(),
-    text: z.string(),
-}, {
-    authorName: (name) => name?.length ? sql.fragment`(author.first_name || ' ' || author.last_name) ILIKE ${'%' + name + '%'}` : null,
-    id: (value) => arrayFilter(value, sql.fragment`posts.id`),
-    author_id: (value) => arrayFilter(value, sql.fragment`posts.author_id`),
-    date: (value) => dateFilter(value, sql.fragment`posts.created_at`),
-    longPost: (value) => booleanFilter(value, sql.fragment`LENGTH(posts.content) > 50`),
-    postLength: (value) => genericFilter(value, sql.fragment`LENGTH(posts.content) > ${value}`),
-}, {
-    postprocess(conditions, filters, context) {
-        if (context.user) {
-            // Use this to add authorization conditions, limiting which posts can be queried
-            conditions.push(sql.fragment`posts.author_id IS NOT NULL`)
-        }
-        return conditions;
-    },
-});
+    ON author.id = posts.author_id`
+.addGenericFilter("authorName", (name: string) => name?.length ? sql.fragment`(author.first_name || ' ' || author.last_name) ILIKE ${'%' + name + '%'}` : null)
+.addInArrayFilter('author_id', sql.fragment`posts.author_id`)
+.addInArrayFilter('id', sql.fragment`posts.id`)
+.addDateFilter('date', sql.fragment`posts.created_at`)
+.addBooleanFilter('longPost', sql.fragment`LENGTH(posts.content) > 50`)
+.addGenericFilter('postLength', (value: number) => sql.fragment`LENGTH(posts.content) > ${value}`)
 
 export const postsLoader = makeQueryLoader({
     query: {
         select: query,
-        from: fromFragment,
+        view,
     },
     db,
-    filters,
+    constraints(ctx) {
+        if (ctx.user) {
+            // Use this to add authorization conditions, limiting which posts can be queried
+            return sql.fragment`posts.author_id IS NOT NULL`
+        }
+    },
+    options: {
+        orFilterEnabled: true,
+    },
     sortableColumns: {
         name: sql.fragment`author.first_name || author.last_name`,
         createdAt: ["posts", "created_at"],

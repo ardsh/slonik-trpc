@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { sql } from 'slonik';
-import { makeQueryLoader } from 'slonik-trpc';
+import { buildView, makeQueryLoader } from 'slonik-trpc';
 import { mergeFilters } from 'slonik-trpc/utils';
 import { db } from '../slonik';
 import { prisma } from '../client'
-import { companyFilters, employeeCompaniesFilters, employeeFilters } from './employeeFilters';
+import { nameFilter } from './employeeFilters';
 
 export const employee = z.object({
     id: z.number(),
@@ -25,7 +25,8 @@ export const employee = z.object({
 const query = sql.type(employee)`
 SELECT *
 `;
-const fromFragment = sql.fragment`FROM (
+
+const employeeView = buildView`FROM (
     SELECT
         employees.id,
         employees.first_name AS "firstName",
@@ -41,7 +42,14 @@ const fromFragment = sql.fragment`FROM (
         ON employees.id = employee_companies.employee_id
     LEFT JOIN companies
         ON employee_companies.company_id = companies.id
-) employees`;
+) employees`
+.addInArrayFilter('employeeId', sql.fragment`employees.id`, 'numeric')
+.addGenericFilter('employeeName', (value: string) => nameFilter(value, sql.fragment`employees."firstName"`, sql.fragment`employees."lastName"`))
+.addInArrayFilter('companyId', sql.fragment`employees.company_id`, 'numeric')
+.addDateFilter('employmentStartDate', sql.fragment`employees."startDate"`)
+.addDateFilter('employmentEndDate', sql.fragment`employees."endDate"`)
+.addComparisonFilter('employmentSalary', sql.fragment`employees.salary`)
+;
 
 export type {
     InferPayload, InferArgs
@@ -54,7 +62,7 @@ const sqliteCompatibility = true;
 export const employeeLoader = makeQueryLoader({
     query: {
         select: query,
-        from: fromFragment,
+        view: employeeView,
     },
     // SQLite compatibility
     ...(sqliteCompatibility ? {
@@ -70,6 +78,16 @@ export const employeeLoader = makeQueryLoader({
     } : {
         db,
     }),
+    defaults: {
+        orderBy: [["id", "ASC"]],
+        take: 25,
+    },
+    constraints(ctx) {
+        if (!ctx?.userInfo?.id) {
+            // Disable API entirely if unauthorized...
+            return sql.fragment`FALSE`;
+        }
+    },
     sortableColumns: {
         id: "id",
         name: sql.fragment`"firstName" || "lastName"`,
@@ -79,7 +97,6 @@ export const employeeLoader = makeQueryLoader({
         salary: "salary",
         company: "company",
     },
-    filters: mergeFilters([employeeFilters, employeeCompaniesFilters, companyFilters]),
     virtualFields: {
         fullName: {
             dependencies: ["firstName", "lastName"],

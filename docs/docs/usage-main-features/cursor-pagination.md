@@ -8,6 +8,22 @@ To use cursor-based pagination, start by specifying `takeCursors: true` in your 
 
 Use these cursors in the cursor pagination when you want to go to the next (or previous page).
 
+When using cursor pagination, you should also specify a default orderBy when creating the loader.
+
+```ts
+makeQueryLoader({
+    ...options,
+    sortableColumns: {
+        id: sql.fragment`users.id`,
+    },
+    defaults: {
+        orderBy: [['id', 'ASC']],
+    },
+})
+```
+
+For a full clientside implementation tutorial, refer to [the clientside pattern for cursor pagination](https://ardsh.github.io/slonik-trpc/docs/client-type-safety/cursor-pagination)
+
 ## Going to next page
 
 Specify

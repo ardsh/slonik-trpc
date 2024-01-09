@@ -16,7 +16,7 @@ const postsLoader = makeQueryLoader({
         }))`SELECT
             users.first_name || ' ' || users.last_name AS author,
             COUNT(*) AS "postsCount"`,
-        from: sql.fragment`FROM posts
+        view: buildView`FROM posts
         LEFT JOIN users
             ON users.id = posts.author_id`,
         groupBy: sql.fragment`users.id`,
@@ -33,5 +33,5 @@ const groupedByName = await postsLoader.load({
     where: {
         isGmail: false,
     }
-}));
+});
 ```

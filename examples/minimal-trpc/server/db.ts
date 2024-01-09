@@ -27,13 +27,6 @@ const pool = createPool(getPostgresUrl(), {
             (a) => a.name !== "timestamp" && a.name !== "timestamptz"
         ),
         {
-            name: "date",
-            parse: (a) =>
-                !a || !Date.parse(a)
-                    ? a
-                    : new Date(a).toISOString().slice(0, 10),
-        },
-        {
             name: "timestamptz",
             parse: (a) =>
                 !a || !Date.parse(a) ? a : new Date(a).toISOString(),

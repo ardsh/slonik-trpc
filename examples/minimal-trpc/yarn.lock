@@ -1762,6 +1762,11 @@ nanomatch@^1.2.9:
     snapdragon "^0.8.1"
     to-regex "^3.0.1"
 
+nativebird@^1.2.11:
+  version "1.2.11"
+  resolved "https://registry.yarnpkg.com/nativebird/-/nativebird-1.2.11.tgz#9f4a0d78a28b4eb1a68ff0003f05bd5c6ee23d2d"
+  integrity sha512-mZqbma6L/8n1snzCg4WYpg2NLfAavSC09oFzq4b6SRu0KBUFCVHs3ApwHVNSnoEOnMMAUxXhtdhe+uzYs8vH3w==
+
 nice-try@^1.0.4:
   version "1.0.5"
   resolved "https://registry.yarnpkg.com/nice-try/-/nice-try-1.0.5.tgz#a3378a7696ce7d223e88fc9b764bd7ef1089e366"

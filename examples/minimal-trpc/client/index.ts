@@ -25,7 +25,7 @@ type ReplaceNodes<TResult, TPayload> = TResult extends { nodes?: ArrayLike<any>,
 } : TResult;
 
 const getPosts = <TArgs extends InferArgs<PostLoader>>(args: TArgs) => {
-    return client.loadPosts.query(args).then(data => data as ReplaceNodes<typeof data, InferPayload<PostLoader, TArgs>>);
+    return client.loadPosts.query(args as any).then(data => data as ReplaceNodes<typeof data, InferPayload<PostLoader, TArgs>>);
 }
 
 async function main() {

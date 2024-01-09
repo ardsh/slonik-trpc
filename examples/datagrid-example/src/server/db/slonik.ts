@@ -29,18 +29,8 @@ const pool = createPool(getPostgresUrl(), {
     interceptors: [createResultParserInterceptor()],
     typeParsers: [
         ...createTypeParserPreset().filter(
-            (a) =>
-                a.name !== "timestamp" &&
-                a.name !== "timestamptz" &&
-                a.name !== "date"
+            (a) => a.name !== "timestamp" && a.name !== "timestamptz"
         ),
-        {
-            name: "date",
-            parse: (a) =>
-                !a || !Date.parse(a)
-                    ? a
-                    : new Date(a).toISOString().slice(0, 10),
-        },
         {
             name: "timestamptz",
             parse: (a) =>

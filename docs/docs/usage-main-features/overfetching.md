@@ -36,7 +36,7 @@ const postsLoader = makeQueryLoader({
     },
     query: {
         select: sql.type(zodType)`SELECT posts.*, users.first_name, users.last_name`,
-        from: sq.fragment`FROM posts LEFT JOIN users ON users.id = posts.author_id`,
+        view: buildView`FROM posts LEFT JOIN users ON users.id = posts.author_id`,
     },
 });
 ```
