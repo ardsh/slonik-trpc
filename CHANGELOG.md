@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.15.3
+
+### Patch Changes
+
+-   e101dd8: Added auth constraints in buildView
+
 ## 0.15.2
 
 ### Patch Changes
