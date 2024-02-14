@@ -86,6 +86,9 @@ it("Cannot determine table for nonsensical views", async () => {
 it("Allows specifying views in query loader", async () => {
   const userView = buildView`FROM (SELECT * FROM users WHERE LENGTH(users."first_name") < 8) users`
     .addStringFilter(['email', 'first_name', 'last_name'])
+    .setConstraints((ctx) => {
+      return sql.fragment`users.id IS NOT NULL`;
+    })
 
   const loader = makeQueryLoader({
     db,
@@ -100,6 +103,7 @@ it("Allows specifying views in query loader", async () => {
     }
   });
   expect(query.sql).toContain(`"last_name" = `);
+  expect(query.sql).toContain(`users.id IS NOT NULL`);
   expect(query.sql).toContain("LENGTH(users.\"first_name\") < 8");
   expect(query.values).toEqual(['buzz']);
 
@@ -220,7 +224,7 @@ describe("Filters", () => {
     });
     expect(query.sql).toContain(`"users".id = ANY(`);
     expect(query.sql).toContain(`users.id = $`);
-    expect(query.sql).toContain(`) OR (`);
+    expect(query.sql).toContain(` OR (`);
   });
   it("Allows specifying comparison filters", async () => {
     const query = await userView.getWhereFragment({
@@ -236,7 +240,7 @@ describe("Filters", () => {
     });
     expect(query.sql).toContain(`"users".id > `);
     expect(query.sql).toContain(`"posts"."title" = `);
-    expect(query.sql).toContain(`) AND (`);
+    expect(query.sql).toContain(` AND (`);
   });
   it('json filter handles a combination of different types', async () => {
     const settings = {

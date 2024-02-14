@@ -258,6 +258,19 @@ const userLoader = makeQueryLoader({
 Constraints are like hardcoded filters that are always applied.
 Any kind of SQL condition will do, and you can also return an array of multiple conditions, they will be joined with `AND`.
 
+You can also specify constraints when creating a view
+
+```ts
+const userView = buildView`FROM posts
+LEFT JOIN users
+    ON posts.author = users.id`
+.setConstraints((ctx) => {
+    return sql.fragment`users.org_id=${ctx.orgId}`;
+})
+```
+
+These conditions will be added anywhere the view is used.
+
 #### Postprocessing columns
 
 If you need to check specific columns, you can virtualize them with the same name, and run any checks.

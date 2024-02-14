@@ -20,6 +20,7 @@ import {
     stringFilterType,
 } from "../helpers/sqlUtils";
 import { notEmpty } from "../helpers/zod";
+import type { PromiseOrValue } from "../helpers/types";
 
 export type Interpretors<
     TFilter extends Record<string, any>,
@@ -305,6 +306,7 @@ export type BuildView<
         ctx?: any;
         options?: FilterOptions;
     }): Promise<FragmentSqlToken>;
+    setConstraints: (constraints: (ctx: any) => PromiseOrValue<SqlFragment | SqlFragment[] | null | undefined>) => BuildView<TFilter, TFilterKey, TAliases>;
     getFromFragment(): FragmentSqlToken;
     /**
      * Returns all filters that have been added to the view
@@ -361,7 +363,9 @@ export type BuildView<
 } & SqlFragment;
 
 type FilterOptions = {
-    orEnabled: boolean;
+    orEnabled?: boolean;
+    /** If true, auth constraints aren't considered. Only use if you're already adding them in query loaders */
+    bypassConstraints?: boolean;
 };
 
 export const buildView = (
@@ -372,6 +376,7 @@ export const buildView = (
     if (!fromFragment.sql.match(/^\s*FROM/i)) {
         throw new Error("First part of view must be FROM");
     }
+    let constraints = null as ((ctx: any) => PromiseOrValue<SqlFragment | SqlFragment[] | null | undefined>) | null;
     const preprocessors = [] as ((
         filters: any,
         context: any
@@ -406,13 +411,18 @@ export const buildView = (
                 const filters = await acc;
                 return preprocessor(filters, context);
             }, filters);
+        const authConditions = constraints && !options?.bypassConstraints ? await constraints(context) : null;
+        const auth = Array.isArray(authConditions) ? authConditions : [authConditions].filter(notEmpty);
         const conditions = await interpretFilter(
             postprocessedFilters || filters,
             interpreters as any,
             context,
             options,
         );
-        return conditions;
+        return [
+            ...auth,
+            ...conditions,
+        ];
     };
     const getWhereFragment = async (
         filters: RecursiveFilterConditions<any>,
@@ -421,10 +431,10 @@ export const buildView = (
     ) => {
         const conditions = await getWhereConditions(filters, context, options);
         return conditions.length
-            ? sql.fragment`WHERE (${sql.join(
+            ? sql.fragment`WHERE \n(${sql.join(
                   conditions,
-                  sql.fragment`\n) AND(\n`
-              )})`
+                  sql.fragment`)\nAND (`
+              )})\n`
             : sql.fragment``;
     };
 
@@ -564,6 +574,10 @@ export const buildView = (
                 return interpret(value, ...args);
             });
         },
+        setConstraints(cons: (ctx: any) => PromiseOrValue<SqlFragment | SqlFragment[] | null | undefined>) {
+            constraints = cons;
+            return self;
+        },
         getWhereConditions: async (args: any) => {
             return getWhereConditions(args.where, args.ctx, args.options);
         },
@@ -627,7 +641,7 @@ const interpretFilter = async <TFilter extends Record<string, any>>(
         ).then((filters) => filters.filter(notEmpty));
         if (orConditions?.length) {
             addCondition(
-                sql.fragment`(${sql.join(orConditions, sql.fragment`) OR (`)})`
+                sql.fragment`(${sql.join(orConditions, sql.fragment`)\n    OR (`)})`
             );
         }
     }
@@ -647,7 +661,7 @@ const interpretFilter = async <TFilter extends Record<string, any>>(
             addCondition(
                 sql.fragment`(${sql.join(
                     andConditions,
-                    sql.fragment`) AND (`
+                    sql.fragment`)\n    AND (`
                 )})`
             );
         }
