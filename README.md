@@ -37,10 +37,25 @@ TypeScript 4.5+
 Slonik 33+
 Zod 3+
 
+### Demo
+
+[Basic demo](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datagrid-example) of a table with pagination, sorting and filtering in codesandbox.
 
 ## Basic Usage
 
-Create a view for your table/relation you want to query, using only the FROM clause part of a SQL query.
+Let's say you have this SQL query for a list of posts you'd like to create an API for
+
+```sql
+SELECT "posts".id
+  , "users"."firstName" || ' ' || "users"."lastName" AS "author"
+  , "posts"."text"
+  , EXTRACT(DAYS FROM NOW() - posts."created_at") AS "age"
+FROM users
+LEFT JOIN posts
+    ON posts.author = users.id
+```
+
+First, get the FROM clause part of the query and build a "view" with it.
 
 ```ts
 import { buildView, sql } from 'slonik-trpc';
@@ -49,11 +64,15 @@ const postsView = buildView`
 FROM users
 LEFT JOIN posts
     ON posts.author = users.id`
+// Allows filtering posts.title: { _ilike: '%hello%' }
 .addStringFilter('posts.title')
+// Allows filter id: [1, 2, 3]
 .addInArrayFilter('id', () => sql.fragment`posts.id`, 'numeric')
 ```
 
-Then write the SELECT part with the fields you want to make queryable in the API, and type them with zod.
+You can [add filters](#filtering) when building the view. The above filters allow searching posts by their title, or their id.
+
+Then get the SELECT part of the query, and specify the return type with zod.
 
 ```ts
 import { z } from 'zod';
@@ -61,13 +80,13 @@ import { sql, makeQueryLoader } from 'slonik-trpc';
 
 const queryType = z.object({
     id: z.string(),
-    name: z.string(),
+    author: z.string(),
     text: z.string(),
     age: z.number(),
 });
 const selectQuery = sql.type(queryType)`
-SELECT "posts".id"
-  , "users"."firstName" || ' ' || "users"."lastName" AS "name"
+SELECT "posts".id
+  , "users"."firstName" || ' ' || "users"."lastName" AS "author"
   , "posts"."text"
   , EXTRACT(DAYS FROM NOW() - posts."created_at") AS "age"
 `
@@ -82,10 +101,10 @@ const loader = makeQueryLoader({
 });
 ```
 
-Query this loader/API by selecting just the fields you need.
+Now you can query this loader/API by selecting just the fields you need.
 
 ```ts
-// This array is type-safe, only having "id", "text", and "age" fields
+// This array is type-safe, only having "id", "text", and "age" fields (no author)
 const posts = await loader.load({
     select: ["id", "text", "age"],
     where: {
@@ -100,10 +119,6 @@ const posts = await loader.load({
 ```
 
 Read on for more advanced usage, including how to use sorting, filtering, cursor pagination, authorization checks, creating a tRPC API and more.
-
-### Demo
-
-Here's a [demo](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datagrid-example) example table in codesandbox, that utilizes a SQLite-compatible mode for generating the queries.
 
 ### [Documentation](https://ardsh.github.io/slonik-trpc/)
 

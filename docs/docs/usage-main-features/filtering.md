@@ -13,7 +13,7 @@ The `buildView` function includes several easy-to-add filter types.
 
 ```ts
 const userView = buildView`FROM users`
-    .addInArrayFilter('id', () => sql.fragment`users.view`, 'numeric')
+    .addInArrayFilter('id', sql.fragment`users.id`, 'numeric')
 ```
 
 This is a simple way to add a filter that accepts both an array, and a single value, of a specific field. The 2nd argument specifies the column we want to compare against (and it can be any kind of SQL fragment, e.g. a `COALESCE` function call, not just a single column).
@@ -69,7 +69,7 @@ where: {
 ### Comparison filters
 
 ```ts
-userView.addComparisonFilter('postsCount', () => sql.fragment`(
+userView.addComparisonFilter('postsCount', sql.fragment`(
     SELECT COUNT(*) FROM posts
     WHERE posts.author_id = users.id
 )`)
@@ -92,7 +92,7 @@ In actuality you'll want to avoid complex SQL fragments like the above, for perf
 The `addBooleanFilter` utility takes in a fragment and applies it if the input is true. It applies the inverse of the condition if the input is `false`, and doesn't apply the filter at all if the input is `null`/`undefined`.
 
 ```ts
-userView.addBooleanFilter('isGmail', () => sql.fragment`users.email ILIKE '%gmail.com'`)
+userView.addBooleanFilter('isGmail', sql.fragment`users.email ILIKE '%gmail.com'`)
 ```
 
 To use the filter, you can pass an `isGmail` value to the `where` object:
@@ -148,7 +148,7 @@ WHERE "settings"::jsonb @> '{"notifications": true, "theme": "dark"}'
 Similarly to other filters, you can specify a 2nd "mapper" argument to specify a different field from the filter name, e.g.
 
 ```ts
-view.addJsonContainsFilter('settings', () => sql.fragment`users.user_settings`);
+view.addJsonContainsFilter('settings', sql.fragment`users.user_settings`);
 ```
 
 ## Generic filters
@@ -202,10 +202,10 @@ A good method of organizing filters is to declare them with basic views, for eac
 ```ts
 const postView = buildView`FROM posts`
     .addStringFilter(['posts.title', 'posts.content'])
-    .addBooleanFilter('longPost', () => sql.fragment`LENGTH(posts.content) > 500`)
+    .addBooleanFilter('longPost', sql.fragment`LENGTH(posts.content) > 500`)
 const userView = buildView`FROM users`
     .addStringFilter(['users.first_name', 'users.last_name'])
-    .addBooleanFilter('isGmail', () => sql.fragment`users.email ILIKE '%gmail.com'`)
+    .addBooleanFilter('isGmail', sql.fragment`users.email ILIKE '%gmail.com'`)
 ```
 
 If we have a view that joins the `posts` and `users` tables, we can reuse the filters from the `postView` and `userView`:
