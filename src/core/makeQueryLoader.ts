@@ -428,8 +428,8 @@ export function makeQueryLoader<
     if (fromFragment && fromFragment.sql?.length > 5 && !fromFragment?.sql?.match?.(/^\s*FROM/i)) {
         throw new Error("query.from must begin with FROM");
     }
-    if (!query?.sql?.match?.(/^\s*SELECT/i)) {
-        throw new Error("Your query must begin with SELECT");
+    if (!query?.sql?.match?.(/^\s*(SELECT|WITH)/i)) {
+        throw new Error("Your query must begin with SELECT or WITH");
     }
     const type = options.type || (query as QuerySqlToken).parser as z.AnyZodObject;
     // @ts-expect-error accessing internal _any
@@ -702,11 +702,11 @@ export function makeQueryLoader<
         }
 
         // Run another root query, that only selects the column names that aren't excluded, or only ones that are included.
-        const finalQuery = sql.type(zodType)`WITH root_query AS (${baseQuery})
+        const finalQuery = sql.type(zodType)`
             SELECT ${sql.join(
                 finalKeys,
                 sql.fragment`, `
-            )} FROM root_query`;
+            )} FROM (${baseQuery}) AS root_query`;
         for (const plugin of (options.plugins || [])) {
             if (plugin.onGetQuery) {
                 plugin.onGetQuery({
