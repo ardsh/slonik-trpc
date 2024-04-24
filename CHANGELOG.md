@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.15.4
+
+### Patch Changes
+
+-   083bc12: Allowing WITH queries to be used in select
+
 ## 0.15.3
 
 ### Patch Changes
