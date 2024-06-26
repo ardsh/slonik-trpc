@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.15.5
+
+### Patch Changes
+
+-   c4d9a61: Added load function to buildView
+
 ## 0.15.4
 
 ### Patch Changes
