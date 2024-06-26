@@ -689,7 +689,7 @@ export function makeQueryLoader<
         const extraSelectFields = extraSelects.length ? sql.fragment`, ${sql.join(extraSelects, sql.fragment`, `)}` : sql.fragment``;
 
         const baseQuery = sql.type(zodType)`${actualQuery} ${extraSelectFields} ${fromFragment ?? sql.fragment``} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
-        ${conditions.length ? sql.fragment`WHERE (${sql.join(conditions, sql.fragment`) AND (`)})` : sql.fragment``}
+        ${conditions.length ? sql.fragment`WHERE (${sql.join(conditions, sql.fragment`)\n  AND (`)})` : sql.fragment``}
         ${groupExpression?.length ? sql.fragment`GROUP BY ${sql.join(groupExpression, sql.fragment`, `)}` : sql.fragment``}
         ${orderExpressions ? sql.fragment`ORDER BY ${sql.join(orderExpressions.map(parsed => interpretOrderBy(orderByType.parse(parsed), reverse)), sql.fragment`, `)}` : sql.fragment``}
         ${typeof take === 'number' ? sql.fragment`LIMIT ${take}` : sql.fragment``}
@@ -702,11 +702,11 @@ export function makeQueryLoader<
         }
 
         // Run another root query, that only selects the column names that aren't excluded, or only ones that are included.
-        const finalQuery = sql.type(zodType)`
+        const finalQuery = sql.type(zodType)`WITH root_query AS (${baseQuery})
             SELECT ${sql.join(
                 finalKeys,
                 sql.fragment`, `
-            )} FROM (${baseQuery}) AS root_query`;
+            )} FROM root_query`;
         for (const plugin of (options.plugins || [])) {
             if (plugin.onGetQuery) {
                 plugin.onGetQuery({
