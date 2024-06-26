@@ -37,6 +37,7 @@ export const dateFilterType = z
         _gt: z.string(),
         _lte: z.string(),
         _gte: z.string(),
+        _is_null: z.boolean(),
     })
     .partial();
 
@@ -73,23 +74,7 @@ export const dateFilter = (
     date: z.infer<typeof dateFilterType> | undefined | null,
     field: Fragment
 ) => {
-    const conditions = [] as Fragment[];
-    if (date?._gt) {
-        conditions.push(sql.fragment`${field} > ${date._gt}`);
-    }
-    if (date?._lt) {
-        conditions.push(sql.fragment`${field} < ${date._lt}`);
-    }
-    if (date?._gte) {
-        conditions.push(sql.fragment`${field} >= ${date._gte}`);
-    }
-    if (date?._lte) {
-        conditions.push(sql.fragment`${field} <= ${date._lte}`);
-    }
-    if (conditions.length) {
-        return sql.fragment`(${sql.join(conditions, sql.fragment`) AND (`)})`;
-    }
-    return null;
+    return comparisonFilter(date, field);
 };
 
 export const arrayDynamicFilter = (type = 'text') => (

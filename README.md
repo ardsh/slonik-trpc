@@ -488,6 +488,36 @@ virtualFields: {
 },
 ```
 
+### Querying a view directly
+
+You can query a view directly for easier usage.
+
+```ts
+const usersView = buildView`FROM users`
+    .addInArrayFilter('id')
+    .addStringFilter(['users.name', 'users.profession'])
+    .addComparisonFilter('postsCount', () => sql.fragment`users."authoredPosts"`)
+    .addDateFilter('createdDate', () => sql.fragment`users.created_at`)
+    .addJsonContainsFilter('users.settings') // jsonb column
+    .addBooleanFilter('isGmail', () => sql.fragment`users.email ILIKE '%gmail.com'`)
+    .setColumns(["name", "profession", "email"])
+    .setColumns({
+        createdDate: sql.fragment`users.created_at AS "createdDate"`,
+        postsCount: sql.fragment`( SELECT COUNT(*) FROM posts
+        WHERE posts.user_id = users.id) AS "postsCount"`,
+    })
+
+const data = await usersView.load({
+    select: ["name", "profession", "postsCount"],
+    where: {
+        id: [1, 2],
+    },
+    orderBy: sql.fragment`users.name DESC`,
+})
+```
+
+The idea is you declare all the filters and relevant columns upfront, and then you can reuse them easily.
+
 ### Nested arrays and objects
 
 You can use PostgreSQL functions for creating json arrays and objects in your query. Two such utils are exposed for convenience through `rowToJson` and `rowsToArray`.

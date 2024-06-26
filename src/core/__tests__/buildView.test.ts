@@ -1,7 +1,9 @@
 import { sql } from 'slonik'
+import { z } from 'zod'
 import { makeQueryTester } from './makeQueryTester';
 import { buildView } from '../../index'
 import { makeQueryLoader } from '../makeQueryLoader';
+import { expectTypeOf } from 'expect-type'
 
 const { db } = makeQueryTester('buildView')
 
@@ -187,7 +189,11 @@ describe("Filters", () => {
     .addComparisonFilter('postsCount', ({ users }) => sql.fragment`${users}."authoredPosts"`)
     .addDateFilter('users.created_at')
     .addJsonContainsFilter('settings')
-    .addBooleanFilter('isGmail', (table) => sql.fragment`${table.users}.email ILIKE '%gmail.com'`)
+    .addBooleanFilter(
+      'isGmail',
+      table => sql.fragment`${table.users}.email ILIKE '%gmail.com'`,
+      sql.fragment`users.email NOT ILIKE '%gmail.com'`
+    )
 
   it("Allows specifying generic filters", async () => {
     const query = await userView.getWhereFragment({
@@ -202,7 +208,7 @@ describe("Filters", () => {
   it("Allows specifying in array filters", async () => {
     const query = await userView.getWhereFragment({
       where: {
-        isGmail: true,
+        isGmail: false,
         postsCount: {
           _gte: 30,
         },
@@ -225,6 +231,7 @@ describe("Filters", () => {
     expect(query.sql).toContain(`"users".id = ANY(`);
     expect(query.sql).toContain(`users.id = $`);
     expect(query.sql).toContain(` OR (`);
+    expect(query.sql).toContain(`NOT ILIKE '%gmail.com'`);
   });
   it("Allows specifying comparison filters", async () => {
     const query = await userView.getWhereFragment({
@@ -235,12 +242,16 @@ describe("Filters", () => {
           },
         }, {
           "posts.title": 'abc',
-        }]
+        }],
+        "users.created_at": {
+          _is_null: true,
+        }
       }
     });
     expect(query.sql).toContain(`"users".id > `);
     expect(query.sql).toContain(`"posts"."title" = `);
     expect(query.sql).toContain(` AND (`);
+    expect(query.sql).toContain(`IS NULL`);
   });
   it('json filter handles a combination of different types', async () => {
     const settings = {
@@ -267,4 +278,98 @@ describe("Filters", () => {
     });
     expect(query?.sql).toBeFalsy();
   });
+
+
+  describe('View Data Loading', () => {
+    const userPostType = z.object({
+      id: z.string(),
+      text: z.string()
+    })
+    it('loads data from a view', async () => {
+      const data = await userView.load({
+        where: {
+          settings: null
+        },
+        select: sql.type(
+          userPostType
+        )`SELECT DISTINCT ON(posts.text) users.id, posts.text`,
+        orderBy: sql.fragment`posts.text DESC NULLS LAST`,
+        db
+      })
+      expect(data[0]).toEqual({
+        id: expect.any(String),
+        text: expect.any(String)
+      })
+      expectTypeOf(data[0]).toEqualTypeOf<{
+        id: string
+        text: string
+      }>()
+
+      expect(data[0].text > data[1].text).toBe(true)
+    })
+
+    it('handles groupBy argument for getting the count of user posts', async () => {
+      const data = await userView.load({
+        where: {
+          settings: null
+        },
+        select: sql.fragment`SELECT users.id, COUNT(*)`,
+        groupBy: sql.fragment`users.id`,
+        db
+      })
+      expect(data[0]).toEqual({
+        id: expect.any(String),
+        count: expect.any(Number)
+      })
+    })
+
+    it('handles take, and skip arguments', async () => {
+      const data = await userView.load({
+        select: sql.fragment`SELECT users.id, posts.text`,
+        orderBy: sql.fragment`users.id DESC`,
+        take: 5,
+        skip: 2,
+        db
+      })
+      expect(data.length).toBe(5)
+    })
+    it('handles take, and skip arguments together with groupBy', async () => {
+      const data = await userView.load({
+        select: sql.fragment`SELECT users.id, COUNT(*)`,
+        orderBy: sql.fragment`users.id DESC`,
+        groupBy: sql.fragment`users.id`,
+        take: 5,
+        skip: 2,
+        db
+      })
+      expect(data.length).toBe(5)
+      expect(data[0]).toEqual({
+        id: expect.any(String),
+        count: expect.any(Number)
+      })
+    })
+
+    it('Can take pre-selected columns', async () => {
+      const data = await userView
+        .setColumns(["first_name", "email"])
+        .setColumns({
+          count: sql.fragment`COUNT(*)`,
+          id: sql.fragment`id`,
+        })
+        .load({
+          select: ["count", "email", "first_name"],
+          orderBy: sql.fragment`users.id DESC`,
+          groupBy: sql.fragment`users.id`,
+          take: 5,
+          skip: 2,
+          db,
+        })
+        expect(data.length).toBe(5)
+        expect(data[0]).toEqual({
+          first_name: expect.any(String),
+          email: expect.any(String),
+          count: expect.any(Number),
+        })
+    })
+  })
 });
