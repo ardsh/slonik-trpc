@@ -3,9 +3,9 @@ import {
     ValueExpression,
     SqlFragment,
     IdentifierSqlToken,
-  CommonQueryMethods,
-  FragmentSqlToken,
-  QuerySqlToken
+    CommonQueryMethods,
+    FragmentSqlToken,
+    QuerySqlToken,
 } from "slonik";
 import { z } from "zod";
 import {
@@ -150,7 +150,7 @@ export type BuildView<
             allFilters?: TFilter,
             ctx?: any
         ) => SqlFragment),
-        type?: string
+        type?: "text" | "numeric" | "integer" | "bigint" | string
     ) => BuildView<
         TFilter & { [x in TKey]?: z.infer<typeof comparisonFilterType> },
         keyof TFilter | TKey,
@@ -702,8 +702,8 @@ export const buildView = (
             const query = sql.unsafe`${selectFrag} ${getFromFragment()} ${whereFragment}
                 ${args.groupBy ? sql.fragment`GROUP BY ${args.groupBy}` : sql.fragment``}
                 ${args.orderBy ? sql.fragment`ORDER BY ${args.orderBy}` : sql.fragment``}
-                ${typeof args.take === 'number' ? sql.fragment`LIMIT ${args.take}` : sql.fragment``}
-                ${typeof args.skip === 'number' ? sql.fragment`OFFSET ${args.skip}` : sql.fragment``}
+                ${typeof args.take === 'number' && args.take > 0 ? sql.fragment`LIMIT ${args.take}` : sql.fragment``}
+                ${typeof args.skip === 'number' && args.skip > 0 ? sql.fragment`OFFSET ${args.skip}` : sql.fragment``}
             `;
             return db.any(query);
         },

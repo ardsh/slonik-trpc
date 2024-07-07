@@ -41,6 +41,8 @@ Zod 3+
 
 [Basic demo](https://githubbox.com/ardsh/slonik-trpc/tree/main/examples/datagrid-example) of a table with pagination, sorting and filtering in codesandbox.
 
+[Playground](https://sql-api-playground.netlify.app/) where you can see the SQL queries that the engine creates for custom loaders.
+
 ## Basic Usage
 
 Let's say you have this SQL query for a list of posts you'd like to create an API for

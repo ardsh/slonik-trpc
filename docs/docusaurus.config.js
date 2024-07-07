@@ -76,6 +76,11 @@ const config = {
             label: 'GitHub',
             position: 'right',
           },
+          {
+            href: 'https://sql-api-playground.netlify.app/',
+            label: 'Playground',
+            position: 'right',
+          },
         ],
       },
       footer: {

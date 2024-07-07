@@ -117,22 +117,22 @@ export const comparisonFilter = (
     type = 'text'
 ) => {
     const conditions = [] as Fragment[];
-    if (filter?._gt) {
+    if (filter?._gt !== undefined && filter?._gt !== null) {
         conditions.push(sql.fragment`${field} > ${filter._gt}`);
     }
-    if (filter?._lt) {
+    if (filter?._lt !== undefined && filter?._lt !== null) {
         conditions.push(sql.fragment`${field} < ${filter._lt}`);
     }
-    if (filter?._gte) {
+    if (filter?._gte !== undefined && filter?._gte !== null) {
         conditions.push(sql.fragment`${field} >= ${filter._gte}`);
     }
-    if (filter?._lte) {
+    if (filter?._lte !== undefined && filter?._lte !== null) {
         conditions.push(sql.fragment`${field} <= ${filter._lte}`);
     }
-    if (filter?._eq) {
+    if (filter?._eq !== undefined && filter?._eq !== null) {
         conditions.push(sql.fragment`${field} = ${filter._eq}`);
     }
-    if (filter?._neq) {
+    if (filter?._neq !== undefined && filter?._neq !== null) {
         conditions.push(sql.fragment`${field} != ${filter._neq}`);
     }
     if (typeof filter?._in !== 'number' && filter?._in?.length) {
@@ -141,7 +141,7 @@ export const comparisonFilter = (
             conditions.push(fragment);
         }
     }
-    if (typeof filter?._nin !== 'number'  && filter?._nin?.length) {
+    if (typeof filter?._nin !== 'number' && filter?._nin?.length) {
         const fragment = invertFilter(arrayFilter(filter._nin, field, type));
         if (fragment) {
             conditions.push(fragment);

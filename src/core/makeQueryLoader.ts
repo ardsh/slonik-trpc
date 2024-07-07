@@ -849,7 +849,6 @@ export function makeQueryLoader<
                 TDisabledFilters
             >, Exclude<GetNonEmptyKeys<TFilterTypes, TSortable>, "takeCursors">>, database?: Pick<CommonQueryMethods, "any">
         ) {
-            // TODO: Remove this
             if (args.selectGroups?.length) {
                 const groupFields = args.selectGroups.flatMap(group => options.columnGroups?.[group] || []);
                 args.select = (args.select || []).concat(...groupFields as any[]);
