@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.15.6
+
+### Patch Changes
+
+-   44c0aa1: Fixed comparison filter, added playground link
+
 ## 0.15.5
 
 ### Patch Changes
