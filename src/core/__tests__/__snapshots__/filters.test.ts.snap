@@ -89,6 +89,34 @@ exports[`AND Filters nested with OR 2`] = `
 }
 `;
 
+exports[`AND with empty OR array 1`] = `
+{
+  "sql": "("value" ILIKE '%cheap%')
+ AND ((("id" = $1::"numeric"[])))
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      3,
+      4,
+    ],
+  ],
+}
+`;
+
+exports[`Empty AND and OR arrays 1`] = `
+{
+  "sql": "("value" ILIKE '%cheap%')
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [],
+}
+`;
+
 exports[`Filters on array string fields with a single string 1`] = `
 {
   "sql": "("uid" = ANY($1::"text"[]))
@@ -173,6 +201,22 @@ exports[`Filters on date fields 2`] = `
   "type": "SLONIK_TOKEN_FRAGMENT",
   "values": [
     "2022-02-03",
+  ],
+}
+`;
+
+exports[`OR with empty AND array 1`] = `
+{
+  "sql": "("value" ILIKE '%cheap%')
+ AND ((("value" = ANY($1::"text"[]))))
+ AND (uid = 'x')
+ AND (uid = 'anotherFilter')
+",
+  "type": "SLONIK_TOKEN_FRAGMENT",
+  "values": [
+    [
+      "test",
+    ],
   ],
 }
 `;

@@ -116,6 +116,30 @@ describe("withQueryLoader", () => {
         expect(result).not.toHaveLength(0);
     });
 
+    it("Returns empty array with 0 take", async () => {
+        const loader = makeQueryLoader({
+            db,
+            query: {
+                select: sql.type(zodType)`SELECT *`,
+                from: sql.fragment`FROM test_table_bar`,
+            },
+        });
+        const result = await loader.load({
+            take: 0,
+        });
+        expect(result).toEqual([]);
+        const page = await loader.loadPagination({
+            take: 0,
+            takeCount: true,
+        });
+        expect(page).toEqual({
+            nodes: [],
+            pageInfo: expect.objectContaining({
+                count: 9,
+            }),
+        });
+    });
+
     it("Returns correct query", async () => {
         const loader = makeQueryLoader({
             db,
@@ -2651,5 +2675,39 @@ describe("withQueryLoader", () => {
             }
         });
         expect(query.sql).toContain(`("users"."firstName" = $1)) AND ("id" > 5)`);
+    });
+
+    it("BuildView gets access to context", async () => {
+        const spy = jest.fn();
+        const userView = buildView`FROM (SELECT * FROM users WHERE users.id = ${ctx => {
+            spy(ctx);
+            return ctx.userID;
+        }}) users`;
+        const loader = makeQueryLoader({
+            query: {
+                select: sql.type(z.object({
+                    id: z.string(),
+                }))`SELECT id`,
+                view: userView,
+            },
+            db,
+        });
+        const ctx = {
+            userID: "y",
+            somethingElse: "test",
+        }
+        const query = await loader.getQuery({
+            ctx,
+        });
+        expect(query.values).toEqual(["y"]);
+        expect(spy).toHaveBeenCalledWith(ctx);
+        const data = await loader.load({
+            ctx: {
+                userID: "y",
+            },
+        });
+        expect(data).toEqual([{
+            id: "y",
+        }]);
     });
 });

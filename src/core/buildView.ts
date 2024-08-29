@@ -35,6 +35,7 @@ type LoadViewParameters<
   groupBy?: SqlFragment
   take?: number
   skip?: number
+  ctx?: any
   where?: RecursiveFilterConditions<{
     [x in TFilterKey]?: TFilter[x]
   }>
@@ -381,7 +382,7 @@ export type BuildView<
         options?: FilterOptions;
     }): Promise<FragmentSqlToken>;
     setConstraints: (constraints: (ctx: any) => PromiseOrValue<SqlFragment | SqlFragment[] | null | undefined>) => BuildView<TFilter, TFilterKey, TAliases>;
-    getFromFragment(): FragmentSqlToken;
+    getFromFragment(ctx: Record<string, any>): FragmentSqlToken;
     /**
      * Returns all filters that have been added to the view
      * @param options - Options for configuring the filters
@@ -448,14 +449,14 @@ type Options = FilterOptions & {
 
 export const buildView = (
     parts: readonly string[],
-    ...values: readonly ValueExpression[]
+    ...values: readonly (ValueExpression | ((ctx: Record<string, any>) => ValueExpression))[]
 ) => {
-    const fromFragment = sql.fragment(parts, ...values);
+    const context = {} as Record<string, any>;
+    const fromFragment = sql.fragment(parts, ...values.map(value => typeof value === 'function' ? value(context) ?? null : value));
     if (!fromFragment.sql.match(/^\s*FROM/i)) {
         throw new Error("First part of view must be FROM");
     }
     let constraints = null as ((ctx: any) => PromiseOrValue<SqlFragment | SqlFragment[] | null | undefined>) | null;
-    const context = {} as Record<string, any>;
     const options = {} as Options;
     const allColumns = {} as Record<string, SqlFragment | IdentifierSqlToken>;
     const preprocessors = [] as ((
@@ -527,9 +528,8 @@ export const buildView = (
             : sql.fragment``;
     };
 
-    const getFromFragment = () => {
-        // return sql.fragment`${fromFragment} ${await getWhereFragment(args.where, args.ctx)}`
-        return fromFragment;
+    const getFromFragment = (ctx={}) => {
+        return sql.fragment(parts, ...values.map(value => typeof value === 'function' ? value(ctx) ?? null : value));
     };
 
     const addFilter = (
@@ -692,14 +692,19 @@ export const buildView = (
             if (!db) {
                 throw new Error('Database is not set. Please set the database by calling options({ db: db })');
             }
+            if (args.take === 0) return [];
+            const realContext = {
+                ...context,
+                ...args.ctx,
+            };
             const whereFragment = args.where
-                ? await getWhereFragment(args.where, context, options)
+                ? await getWhereFragment(args.where, realContext, options)
                 : sql.fragment``;
             const selectFrag = Array.isArray(args.select) ?
                 sql.fragment`SELECT ${sql.join(args.select.map(key => allColumns[key]).filter((frag: any) => {
                     return frag && (frag.sql || frag.type);
                 }), sql.fragment`\n, `)}` : args.select;
-            const query = sql.unsafe`${selectFrag} ${getFromFragment()} ${whereFragment}
+            const query = sql.unsafe`${selectFrag} ${getFromFragment(realContext)} ${whereFragment}
                 ${args.groupBy ? sql.fragment`GROUP BY ${args.groupBy}` : sql.fragment``}
                 ${args.orderBy ? sql.fragment`ORDER BY ${args.orderBy}` : sql.fragment``}
                 ${typeof args.take === 'number' && args.take > 0 ? sql.fragment`LIMIT ${args.take}` : sql.fragment``}

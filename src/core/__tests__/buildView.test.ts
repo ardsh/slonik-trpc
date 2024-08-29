@@ -67,6 +67,24 @@ it("Doesn't allow arrays with custom filters", async () => {
     .addBooleanFilter(['long_email', 'something_else'], (table) => sql.fragment`LENGTH(${table._main}.email) > 10`)
   ).toThrow("If you specify a mapper function you cannot have multiple filter keys");
 });
+
+it("Allows using context in view functions", async () => {
+  const loggedInUserView = buildView`FROM (SELECT * FROM users
+  WHERE users.id = ${ctx => ctx.user?.id}) users`;
+  const data = await loggedInUserView.load({
+    select: sql.fragment`SELECT id`,
+    db,
+    ctx: {
+      user: {
+        id: 'y'
+      }
+    }
+  })
+  expect(data).toEqual([{
+    id: 'y',
+  }])
+});
+
 it("Allows specifying multiple keys", async () => {
   const userView = buildView`FROM users`.addStringFilter(['email', 'first_name', 'last_name'])
 
@@ -326,6 +344,19 @@ describe("Filters", () => {
         orderBy: sql.fragment`posts.text DESC NULLS LAST`,
       })).rejects.toThrow(/Database is not set/i);
     })
+
+    it('Returns empty array for take 0', async () => {
+      const data = await userView.load({
+        where: {
+          settings: null
+        },
+        select: sql.fragment`SELECT users.id, COUNT(*)`,
+        groupBy: sql.fragment`users.id`,
+        take: 0,
+        db
+      })
+      expect(data).toEqual([]);
+    });
 
     it('handles groupBy argument for getting the count of user posts', async () => {
       const data = await userView.load({

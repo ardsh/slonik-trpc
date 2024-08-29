@@ -409,7 +409,7 @@ export function makeQueryLoader<
     const queryComponents = options.query;
     const query = queryComponents.select;
     let view = queryComponents.view;
-    const fromFragment = queryComponents.from || view?.getFromFragment();
+    const fromFragment = queryComponents.from || view?.getFromFragment({});
     if (options.filters?.interpreters && !view && fromFragment) {
         // backwards compatible if only filters are specified
         view = buildView`${fromFragment}`
@@ -687,8 +687,9 @@ export function makeQueryLoader<
             lateralExpressions[0] ? sql.fragment`lateralcolumns.cursorjson` : null
         ].filter(notEmpty) : [];
         const extraSelectFields = extraSelects.length ? sql.fragment`, ${sql.join(extraSelects, sql.fragment`, `)}` : sql.fragment``;
+        const realFromFragment = view ? view.getFromFragment(context) : fromFragment;
 
-        const baseQuery = sql.type(zodType)`${actualQuery} ${extraSelectFields} ${fromFragment ?? sql.fragment``} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
+        const baseQuery = sql.type(zodType)`${actualQuery} ${extraSelectFields} ${realFromFragment ?? sql.fragment``} ${lateralExpressions[0] ? sql.fragment`, LATERAL (SELECT ${sql.join(lateralExpressions, sql.fragment`, `)}) lateralcolumns` : sql.fragment``}
         ${conditions.length ? sql.fragment`WHERE (${sql.join(conditions, sql.fragment`)\n  AND (`)})` : sql.fragment``}
         ${groupExpression?.length ? sql.fragment`GROUP BY ${sql.join(groupExpression, sql.fragment`, `)}` : sql.fragment``}
         ${orderExpressions ? sql.fragment`ORDER BY ${sql.join(orderExpressions.map(parsed => interpretOrderBy(orderByType.parse(parsed), reverse)), sql.fragment`, `)}` : sql.fragment``}
@@ -948,7 +949,7 @@ export function makeQueryLoader<
             if (typeof options.contextFactory === 'function') {
                 args.ctx = options.contextFactory(args.ctx);
             }
-            if (!args.take && typeof args.take !== 'number' && options?.defaults?.take) {
+            if (typeof args.take !== 'number' && options?.defaults?.take) {
                 args.take = options.defaults.take;
             }
             const allArgs = args as any;
@@ -959,11 +960,11 @@ export function makeQueryLoader<
             if (reverse === -1 && !allArgs.orderBy?.length && !options?.defaults?.orderBy?.length) {
                 throw new Error("orderBy must be specified when take parameter is negative!");
             }
-            const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (take || 25) + 1;
+            const extraItems = Math.max(Math.min(3, (args?.takeNextPages || 0) - 1), 0) * (take ?? 25) + 1;
             const finalQuery = await getQuery({
                 ...args,
                 take: // Query an extra row to see if the next page exists
-                      (Math.min(Math.max(0, take || 100), (options.options?.maxLimit || 1000)) + extraItems) * reverse,
+                      (Math.min(Math.max(0, take ?? 100), (options.options?.maxLimit || 1000)) + extraItems) * reverse,
             });
             const countQuery = args.takeCount ? sql.type(countQueryType)`SELECT COUNT(*) FROM (${await getQuery({
                 ...args,
@@ -1001,7 +1002,7 @@ export function makeQueryLoader<
             const load = () => db
                 .any(finalQuery)
                 .then(async (nodes) => {
-                    const slicedNodes = nodes.slice(0, take || undefined);
+                    const slicedNodes = nodes.slice(0, take ?? undefined);
                     const rows = reverse === -1 ? slicedNodes.reverse() as never : slicedNodes;
                     const cursors = allArgs.takeCursors && {
                         startCursor: toCursor((rows[0] as any)?.[cursorColumns]),

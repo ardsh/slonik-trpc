@@ -83,7 +83,7 @@ export const arrayDynamicFilter = (type = 'text') => (
     typeOverride?: string
 ) => {
     if (!Array.isArray(filter)) filter = [filter].filter(notEmpty) as string[];
-    if (filter?.length) {
+    if (filter.length) {
         return sql.fragment`${field} = ANY(${sql.array(filter, typeOverride || type)})`;
     }
     return null;
@@ -116,39 +116,40 @@ export const comparisonFilter = (
     field: Fragment,
     type = 'text'
 ) => {
+    if (!filter) return null;
     const conditions = [] as Fragment[];
-    if (filter?._gt !== undefined && filter?._gt !== null) {
+    if (filter._gt !== undefined && filter._gt !== null) {
         conditions.push(sql.fragment`${field} > ${filter._gt}`);
     }
-    if (filter?._lt !== undefined && filter?._lt !== null) {
+    if (filter._lt !== undefined && filter._lt !== null) {
         conditions.push(sql.fragment`${field} < ${filter._lt}`);
     }
-    if (filter?._gte !== undefined && filter?._gte !== null) {
+    if (filter._gte !== undefined && filter._gte !== null) {
         conditions.push(sql.fragment`${field} >= ${filter._gte}`);
     }
-    if (filter?._lte !== undefined && filter?._lte !== null) {
+    if (filter._lte !== undefined && filter._lte !== null) {
         conditions.push(sql.fragment`${field} <= ${filter._lte}`);
     }
-    if (filter?._eq !== undefined && filter?._eq !== null) {
+    if (filter._eq !== undefined && filter._eq !== null) {
         conditions.push(sql.fragment`${field} = ${filter._eq}`);
     }
-    if (filter?._neq !== undefined && filter?._neq !== null) {
+    if (filter._neq !== undefined && filter._neq !== null) {
         conditions.push(sql.fragment`${field} != ${filter._neq}`);
     }
-    if (typeof filter?._in !== 'number' && filter?._in?.length) {
+    if (typeof filter._in !== 'number' && filter._in?.length) {
         const fragment = arrayFilter(filter._in, field, type);
         if (fragment) {
             conditions.push(fragment);
         }
     }
-    if (typeof filter?._nin !== 'number' && filter?._nin?.length) {
+    if (typeof filter._nin !== 'number' && filter._nin?.length) {
         const fragment = invertFilter(arrayFilter(filter._nin, field, type));
         if (fragment) {
             conditions.push(fragment);
         }
     }
-    const isNull = filter?._is_null || filter?._eq === null;
-    const isNotNull = filter?._is_null === false || filter?._neq === null;
+    const isNull = filter._is_null || filter._eq === null;
+    const isNotNull = filter._is_null === false || filter._neq === null;
     if (isNull || isNotNull) {
         conditions.push(isNull ? sql.fragment`${field} IS NULL` : sql.fragment`${field} IS NOT NULL`);
     }

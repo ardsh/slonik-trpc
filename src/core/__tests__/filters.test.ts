@@ -131,6 +131,26 @@ addCombinedFilter("AND Filters deeply nested with OR", ({
     }]
 }));
 
+addCombinedFilter("AND with empty OR array", ({
+    AND: [{
+        OR: [],
+        randomNumber: [3, 4],
+    }]
+}));
+
+addCombinedFilter("OR with empty AND array", ({
+    OR: [{
+        AND: [],
+        valueFilter: ['test'],
+    }]
+}));
+
+addCombinedFilter("Empty AND and OR arrays", ({
+    AND: [],
+    OR: [],
+    isCheap: true,
+}));
+
 it.each(combined)(
     "%s", async (description, data) => {
         expect(await getCombinedConditions(data)).toMatchSnapshot();

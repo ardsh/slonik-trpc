@@ -121,7 +121,7 @@ export function makeFilter<
         if (filter.OR?.length) {
             const orConditions = await Promise.all(filter.OR.map(async (or) => {
                 const orFilter = await interpretFilter(or, context);
-                return orFilter?.length
+                return orFilter.length
                     ? sql.fragment`(${sql.join(
                           orFilter,
                           sql.fragment`) AND (`
@@ -140,7 +140,7 @@ export function makeFilter<
         if (filter.AND?.length) {
             const andConditions = await Promise.all(filter.AND.map(async (and) => {
                 const andFilter = await interpretFilter(and, context);
-                return andFilter?.length
+                return andFilter.length
                     ? sql.fragment`(${sql.join(
                           andFilter,
                           sql.fragment`) AND (`
