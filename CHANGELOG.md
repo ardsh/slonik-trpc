@@ -1,5 +1,11 @@
 # slonik-trpc
 
+## 0.15.7
+
+### Patch Changes
+
+-   c8dffce: Added context passing functions in buildView
+
 ## 0.15.6
 
 ### Patch Changes
